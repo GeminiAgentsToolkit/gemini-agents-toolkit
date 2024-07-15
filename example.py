@@ -15,7 +15,6 @@ def say_to_duck(say):
     return f"duck answer is: duck duck {say} duck duck duck"
 
 all_functions_tools = declarations.generate_tool_from_functions([get_current_time, say_to_duck])
-# duck_tool = declarations.generate_tool_from_functions([say_to_duck])
 
 vertexai.init(project="model-registry-v2", location="us-west1")
 
