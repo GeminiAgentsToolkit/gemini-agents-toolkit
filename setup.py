@@ -13,7 +13,7 @@ install_requires = read_requirements()
 
 setup(
     name='gemini_toolbox',
-    version='0.1.0',
+    version='0.2.0',
     packages=find_packages(),
     description='Toolbox For Using Gemini Agents SDK',
     long_description_content_type='text/markdown',

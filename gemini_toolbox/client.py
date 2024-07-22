@@ -1,6 +1,8 @@
 from vertexai.generative_models import (
-    Part,
+    Part, GenerativeModel,
 )
+import inspect
+from gemini_toolbox import declarations
 
 
 class GeminiChatClient(object):
@@ -47,3 +49,19 @@ class GeminiChatClient(object):
 
         # Extract the text from the final model response
         return response.text
+    
+
+def generate_chat_client_from_functions_package(package, model_name="gemini-1.5-pro", debug=False):
+    all_functions = [
+        func
+        for name, func in inspect.getmembers(package, inspect.isfunction)
+    ]
+    all_functions_tools = declarations.generate_tool_from_functions(all_functions)
+    model = GenerativeModel(model_name=model_name, tools=[all_functions_tools])
+    return GeminiChatClient(all_functions, model, debug=debug)
+
+
+def generate_chat_client_from_functions_list(all_functions, model_name="gemini-1.5-pro", debug=False):
+    all_functions_tools = declarations.generate_tool_from_functions(all_functions)
+    model = GenerativeModel(model_name=model_name, tools=[all_functions_tools])
+    return GeminiChatClient(all_functions, model, debug=debug)
