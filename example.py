@@ -13,6 +13,6 @@ def say_to_duck(say):
 vertexai.init(project="gemini-trading-backend", location="us-west1")
 
 all_functions = [get_current_time, say_to_duck]
-clt = client.generate_chat_client_from_functions_list(all_functions, model_name="gemini-1.5-pro", debug=True)
+clt = client.generate_chat_client_from_functions_list(all_functions, model_name="gemini-1.5-pro", debug=True, recreate_client_each_time=True)
 
 print(clt.send_message("say to the duck message: I am hungry"))
