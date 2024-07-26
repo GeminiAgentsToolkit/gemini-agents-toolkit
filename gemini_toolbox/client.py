@@ -59,8 +59,12 @@ class GeminiChatClient(object):
             print(f"msg: '{msg}' is out")
         # Process any function calls until there are no more function calls in the response
         while response.candidates[0].function_calls:
+            if self.debug:
+                print(f"function call found: {response.candidates[0].function_calls[0]}")
             function_call = response.candidates[0].function_calls[0]
             api_response = self._call_function(function_call)
+            if self.debug:
+                print(f"api response: {api_response}")
             
             # Return the API response to Gemini
             response = self.chat.send_message(
