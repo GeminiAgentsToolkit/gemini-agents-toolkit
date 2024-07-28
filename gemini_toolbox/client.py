@@ -7,12 +7,13 @@ from gemini_toolbox import declarations
 
 class GeminiChatClient(object):
 
-    def __init__(self, functions, model, *, debug=False, recreate_client_each_time=False, history_depth=-1):
+    def __init__(self, functions, model, *, debug=False, recreate_client_each_time=False, history_depth=-1, do_not_die=False):
         self.functions = {func.__name__: func for func in functions}
         self.chat = model.start_chat()
         self._model = model
         self.debug = debug
         self.recreate_client_each_time = recreate_client_each_time
+        self.do_not_die = do_not_die
         if history_depth > 0 and recreate_client_each_time:
             raise ValueError("history_depth can only be used with recreate_client_each_time=False")
 
@@ -54,44 +55,50 @@ class GeminiChatClient(object):
     def send_message(self, msg):
         if self.debug:
             print(f"about to send msg: {msg}")
-        response = self.chat.send_message(msg)
-        if self.debug:
-            print(f"msg: '{msg}' is out")
-        # Process any function calls until there are no more function calls in the response
-        while response.candidates[0].function_calls:
+        try:
+            response = self.chat.send_message(msg)
             if self.debug:
-                print(f"function call found: {response.candidates[0].function_calls[0]}")
-            function_call = response.candidates[0].function_calls[0]
-            api_response = self._call_function(function_call)
-            if self.debug:
-                print(f"api response: {api_response}")
-            
-            # Return the API response to Gemini
-            response = self.chat.send_message(
-                Part.from_function_response(
-                    name=function_call.name,
-                    response={
-                        "content": api_response,
-                    },
-                ),
-            )
+                print(f"msg: '{msg}' is out")
+            # Process any function calls until there are no more function calls in the response
+            while response.candidates[0].function_calls:
+                if self.debug:
+                    print(f"function call found: {response.candidates[0].function_calls[0]}")
+                function_call = response.candidates[0].function_calls[0]
+                api_response = self._call_function(function_call)
+                if self.debug:
+                    print(f"api response: {api_response}")
+                
+                # Return the API response to Gemini
+                response = self.chat.send_message(
+                    Part.from_function_response(
+                        name=function_call.name,
+                        response={
+                            "content": api_response,
+                        },
+                    ),
+                )
 
-        self._maybe_recreate_client()
+            self._maybe_recreate_client()
+        except Exception as e:
+            if self.do_not_die:
+                return {"error": str(e)}
+            else:
+                raise e
         # Extract the text from the final model response
         return response.text
     
 
-def generate_chat_client_from_functions_package(package, model_name="gemini-1.5-pro", *, system_instruction="", debug=False, recreate_client_each_time=False, history_depth=-1):
+def generate_chat_client_from_functions_package(package, model_name="gemini-1.5-pro", *, system_instruction="", debug=False, recreate_client_each_time=False, history_depth=-1, do_not_die=False):
     all_functions = [
         func
         for name, func in inspect.getmembers(package, inspect.isfunction)
     ]
     all_functions_tools = declarations.generate_tool_from_functions(all_functions)
     model = GenerativeModel(model_name=model_name, tools=[all_functions_tools], system_instruction=system_instruction)
-    return GeminiChatClient(all_functions, model, debug=debug, recreate_client_each_time=recreate_client_each_time, history_depth=history_depth)
+    return GeminiChatClient(all_functions, model, debug=debug, recreate_client_each_time=recreate_client_each_time, history_depth=history_depth, do_not_die=do_not_die)
 
 
-def generate_chat_client_from_functions_list(all_functions, model_name="gemini-1.5-pro", *, system_instruction="", debug=False, recreate_client_each_time=False, history_depth=-1):
+def generate_chat_client_from_functions_list(all_functions, model_name="gemini-1.5-pro", *, system_instruction="", debug=False, recreate_client_each_time=False, history_depth=-1, do_not_die=False):
     all_functions_tools = declarations.generate_tool_from_functions(all_functions)
     model = GenerativeModel(model_name=model_name, tools=[all_functions_tools], system_instruction=system_instruction)
-    return GeminiChatClient(all_functions, model, debug=debug, recreate_client_each_time=recreate_client_each_time, history_depth=history_depth)
+    return GeminiChatClient(all_functions, model, debug=debug, recreate_client_each_time=recreate_client_each_time, history_depth=history_depth, do_not_die=do_not_die)
