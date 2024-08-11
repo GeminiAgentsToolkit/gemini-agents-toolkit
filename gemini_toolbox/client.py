@@ -3,6 +3,7 @@ from vertexai.generative_models import (
 )
 import inspect
 from gemini_toolbox import declarations
+import logging
 
 
 class GeminiChatClient(object):
@@ -81,6 +82,8 @@ class GeminiChatClient(object):
             self._maybe_recreate_client()
         except Exception as e:
             if self.do_not_die:
+                # log error to stadnart pytohng error logger
+                logging.error(e, exc_info=True, stack_info=True)
                 return {"error": str(e)}
             else:
                 raise e
