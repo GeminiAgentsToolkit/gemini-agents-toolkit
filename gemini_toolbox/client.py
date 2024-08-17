@@ -3,6 +3,7 @@ from vertexai.generative_models import (
 )
 import inspect
 from gemini_toolbox import declarations
+from gemini_toolbox import scheduler
 import logging
 
 
@@ -91,17 +92,26 @@ class GeminiChatClient(object):
         return response.text
     
 
-def generate_chat_client_from_functions_package(package, model_name="gemini-1.5-pro", *, system_instruction="", debug=False, recreate_client_each_time=False, history_depth=-1, do_not_die=False):
+def generate_chat_client_from_functions_package(package, model_name="gemini-1.5-pro", *, system_instruction="", debug=False, recreate_client_each_time=False, history_depth=-1, do_not_die=False, add_scheduling_functions=False):
     all_functions = [
         func
         for name, func in inspect.getmembers(package, inspect.isfunction)
     ]
-    all_functions_tools = declarations.generate_tool_from_functions(all_functions)
-    model = GenerativeModel(model_name=model_name, tools=[all_functions_tools], system_instruction=system_instruction)
-    return GeminiChatClient(all_functions, model, debug=debug, recreate_client_each_time=recreate_client_each_time, history_depth=history_depth, do_not_die=do_not_die)
+    return generate_chat_client_from_functions_list(all_functions, model_name=model_name, system_instruction=system_instruction, debug=debug, recreate_client_each_time=recreate_client_each_time, history_depth=history_depth, do_not_die=do_not_die)
 
 
-def generate_chat_client_from_functions_list(all_functions, model_name="gemini-1.5-pro", *, system_instruction="", debug=False, recreate_client_each_time=False, history_depth=-1, do_not_die=False):
+def generate_chat_client_from_functions_list(all_functions, model_name="gemini-1.5-pro", *, system_instruction="", debug=False, recreate_client_each_time=False, history_depth=-1, do_not_die=False, add_scheduling_functions=False):
+    if add_scheduling_functions:
+        scheduler_instance = scheduler.ScheduledTaskExecutor()
+        all_functions.extend([
+            scheduler_instance.add_minute_task,
+            scheduler_instance.add_daily_task,
+            scheduler_instance.get_all_jobs,
+        ])
     all_functions_tools = declarations.generate_tool_from_functions(all_functions)
     model = GenerativeModel(model_name=model_name, tools=[all_functions_tools], system_instruction=system_instruction)
-    return GeminiChatClient(all_functions, model, debug=debug, recreate_client_each_time=recreate_client_each_time, history_depth=history_depth, do_not_die=do_not_die)
+    clnt = GeminiChatClient(all_functions, model, debug=debug, recreate_client_each_time=recreate_client_each_time, history_depth=history_depth, do_not_die=do_not_die)
+    if add_scheduling_functions:
+        scheduler_instance.set_gemini_client(clnt)
+        scheduler_instance.start_scheduler()
+    return clnt
