@@ -92,17 +92,19 @@ class GeminiChatClient(object):
         return response.text
     
 
-def generate_chat_client_from_functions_package(package, model_name="gemini-1.5-pro", *, system_instruction="", debug=False, recreate_client_each_time=False, history_depth=-1, do_not_die=False, add_scheduling_functions=False):
+def generate_chat_client_from_functions_package(package, model_name="gemini-1.5-pro", *, system_instruction="", debug=False, recreate_client_each_time=False, history_depth=-1, do_not_die=False, add_scheduling_functions=False, gcs_bucket=None, gcs_blob=None):
     all_functions = [
         func
         for name, func in inspect.getmembers(package, inspect.isfunction)
     ]
-    return generate_chat_client_from_functions_list(all_functions, model_name=model_name, system_instruction=system_instruction, debug=debug, recreate_client_each_time=recreate_client_each_time, history_depth=history_depth, do_not_die=do_not_die)
+    return generate_chat_client_from_functions_list(all_functions, model_name=model_name, system_instruction=system_instruction, debug=debug, recreate_client_each_time=recreate_client_each_time, history_depth=history_depth, do_not_die=do_not_die, add_scheduling_functions=add_scheduling_functions, gcs_bucket=gcs_bucket, gcs_blob=gcs_blob)
 
 
-def generate_chat_client_from_functions_list(all_functions, model_name="gemini-1.5-pro", *, system_instruction="", debug=False, recreate_client_each_time=False, history_depth=-1, do_not_die=False, add_scheduling_functions=False):
+def generate_chat_client_from_functions_list(all_functions, model_name="gemini-1.5-pro", *, system_instruction="", debug=False, recreate_client_each_time=False, history_depth=-1, do_not_die=False, add_scheduling_functions=False, gcs_bucket=None, gcs_blob=None):
+    if (not gcs_bucket and gcs_blob) or (gcs_bucket and not gcs_blob):
+        raise ValueError("Both gcs_bucket and gcs_blob must be provided")
     if add_scheduling_functions:
-        scheduler_instance = scheduler.ScheduledTaskExecutor()
+        scheduler_instance = scheduler.ScheduledTaskExecutor(debug=debug, gcs_bucket=gcs_bucket, gcs_blob=gcs_blob)
         all_functions.extend([
             scheduler_instance.add_minute_task,
             scheduler_instance.add_daily_task,
