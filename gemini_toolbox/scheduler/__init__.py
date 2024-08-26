@@ -57,6 +57,12 @@ class ScheduledTaskExecutor:
         Returns all the jobs currently scheduled in the scheduler. If user asks about periodic tasks/jobs/etc this function should be used.
         """
         return [ task.__dict__ for task in self.tasks ]
+    # 
+    # IMPORTANT: keep in mind that this prompt will be send to LLM/you as if it is comming from the user! This is importnat becuase you need to refactor user prompt and not to be sending it as is. For exmple
+    # If user sends "I want you to send me a message 'You are awesome'" you can NOT use prompt "you are awesome", becuase this promopt will go to YOU!
+    # so you will get message "you are awesome!". So the prompt should be something like: "can you send me message 'You are awesome' with the function to send messages and generate text DONE"
+    # Since prompt is send from the job scheuler andy directly generated text back will NOT be read by user, if user provided any function that can send message back to them
+    # that functions should be used intested. but in order to use it you have to explicitly ASK it in the promopt.
 
     def add_daily_task(self, prompt: str, *, precondition_prompt: str = None, negative_prompt: str = None):
         """
