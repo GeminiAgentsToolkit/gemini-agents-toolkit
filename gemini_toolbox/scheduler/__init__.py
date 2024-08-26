@@ -41,11 +41,11 @@ class ScheduledTaskExecutor:
 
     def get_all_jobs(self):
         """
-        Returns all the jobs currently scheduled in the scheduler.
+        Returns all the jobs currently scheduled in the scheduler. If user asks about periodic tasks/jobs/etc this function should be used.
         """
         return self.scheduler.get_jobs()
 
-    def add_daily_task(self, prompt, *, precondition_prompt=None, negative_prompt=None):
+    def add_daily_task(self, prompt: str, *, precondition_prompt: str = None, negative_prompt: str = None):
         """
         Adds a new daily task to the scheduler. It will be executed once per day.
         All input prompts should be done in a natural language it will be sent to GPT/Gemini like LLM to be processed as is.
@@ -60,7 +60,7 @@ class ScheduledTaskExecutor:
         task = LLMTask(prompt, precondition_prompt=precondition_prompt, negative_prompt=negative_prompt, frequency='daily')
         return self._add_task(task, CronTrigger(hour='1'))
 
-    def add_minute_task(self, prompt, *, precondition_prompt=None, negative_prompt=None):
+    def add_minute_task(self, prompt: str, *, precondition_prompt: str = None, negative_prompt: str = None):
         """
         Adds a new minute task to the scheduler. It will be executed once per minute.
         All input prompts should be done in a natural language it will be sent to GPT/Gemini like LLM to be processed as is.

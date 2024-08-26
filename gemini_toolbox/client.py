@@ -77,6 +77,8 @@ def generate_chat_client_from_functions_list(all_functions, model_name="gemini-1
             scheduler_instance.add_daily_task,
             scheduler_instance.get_all_jobs,
         ])
+    if debug:
+        print(f"all_functions: {all_functions}")
     model = GenerativeModel(model_name=model_name, tools=all_functions, system_instruction=system_instruction)
     clnt = GeminiChatClient(all_functions, model, debug=debug, recreate_client_each_time=recreate_client_each_time, history_depth=history_depth, do_not_die=do_not_die)
     if add_scheduling_functions:
