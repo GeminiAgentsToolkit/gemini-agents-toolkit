@@ -1,8 +1,9 @@
 import sys
+import os
 
-import vertexai
+import google.generativeai as genai
 
-from vertexai.generative_models import (
+from google.generativeai import (
     GenerativeModel,
 )
 
@@ -16,11 +17,9 @@ def generate_client():
 	    "if you asked to update something most likely you need to show same data stracture but updated, in the same format. Do not show HOW to update data structure, update it and output the result.",
 	    "Here is how you might be used by user: cat file | you -p \"prompt\" >> result"
     ]
-
-    vertexai.init()
+    genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
 
     return GenerativeModel(model_name="gemini-1.5-pro", system_instruction=system_instruction)
-
 
 gemini_model = generate_client()
 
