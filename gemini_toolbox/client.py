@@ -76,6 +76,7 @@ def generate_chat_client_from_functions_list(all_functions, model_name="gemini-1
             scheduler_instance.add_minute_task,
             scheduler_instance.add_daily_task,
             scheduler_instance.get_all_jobs,
+            scheduler_instance.delete_job,
         ])
     if debug:
         print(f"all_functions: {all_functions}")

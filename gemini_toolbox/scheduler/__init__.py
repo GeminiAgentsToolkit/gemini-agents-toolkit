@@ -39,11 +39,24 @@ class ScheduledTaskExecutor:
         if self.gcs_blob:
             self._download_json_from_gcs()
 
+    def delete_job(self, job_id: str):
+        """
+        Deletes a job from the scheduler based on the job_id.
+        """
+        for task in self.tasks:
+            if task.id == job_id:
+                self.scheduler.remove_job(job_id)
+                self.tasks.remove(task)
+                if self.gcs_blob:
+                    self._upload_json_to_gcs()
+                return "job deleted"
+        return "job not found"
+
     def get_all_jobs(self):
         """
         Returns all the jobs currently scheduled in the scheduler. If user asks about periodic tasks/jobs/etc this function should be used.
         """
-        return self.scheduler.get_jobs()
+        return [ task.__dict__ for task in self.tasks ]
 
     def add_daily_task(self, prompt: str, *, precondition_prompt: str = None, negative_prompt: str = None):
         """
