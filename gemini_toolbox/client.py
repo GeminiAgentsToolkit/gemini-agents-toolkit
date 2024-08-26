@@ -6,15 +6,28 @@ from gemini_toolbox import scheduler
 import logging
 
 
-class GeminiChatClient(object):
+class GeminiAgentClient(object):
 
-    def __init__(self, functions, model, *, debug=False, recreate_client_each_time=False, history_depth=-1, do_not_die=False):
-        self.functions = {func.__name__: func for func in functions}
-        self.chat = model.start_chat(enable_automatic_function_calling=True)
-        self._model = model
+    def __init__(self, model_name="gemini-1.5-pro", *, tools=None, system_instruction=None, delegation_function_prompt=None, delegates=None, debug=False, recreate_client_each_time=False, history_depth=-1, do_not_die=False, on_message=None):
+        if not tools:
+            tools = []
+        if delegates is not None:
+            for delegate in delegates:
+                if not isinstance(delegate, GeminiAgentClient):
+                    raise ValueError("delegates must be a list of GeminiAgentClient instances")
+                if not delegate._delegation_prompt_set:
+                    raise ValueError("all delegates must have a delegation prompt specified set")
+                tools += [delegate.send_message]
+        self._model = GenerativeModel(model_name=model_name, tools=tools, system_instruction=system_instruction)
+        self.chat = self._model.start_chat(enable_automatic_function_calling=True)
         self.debug = debug
         self.recreate_client_each_time = recreate_client_each_time
         self.do_not_die = do_not_die
+        self._delegation_prompt_set = False
+        self.on_message = on_message
+        if delegation_function_prompt is not None:
+            self.send_message.__doc__ = delegation_function_prompt   
+            self._delegation_prompt_set = True 
         if history_depth > 0 and recreate_client_each_time:
             raise ValueError("history_depth can only be used with recreate_client_each_time=False")
         
@@ -55,6 +68,8 @@ class GeminiChatClient(object):
                 return {"error": str(e)}
             else:
                 raise e
+        if self.on_message is not None:
+            self.on_message(response.text)
         # Extract the text from the final model response
         return response.text
     
@@ -80,8 +95,7 @@ def generate_chat_client_from_functions_list(all_functions, model_name="gemini-1
         ])
     if debug:
         print(f"all_functions: {all_functions}")
-    model = GenerativeModel(model_name=model_name, tools=all_functions, system_instruction=system_instruction)
-    clnt = GeminiChatClient(all_functions, model, debug=debug, recreate_client_each_time=recreate_client_each_time, history_depth=history_depth, do_not_die=do_not_die)
+    clnt = GeminiAgentClient(tools=all_functions, model_name=model_name, system_instruction=system_instruction, debug=debug, recreate_client_each_time=recreate_client_each_time, history_depth=history_depth, do_not_die=do_not_die)
     if add_scheduling_functions:
         scheduler_instance.set_gemini_client(clnt)
         scheduler_instance.start_scheduler()
