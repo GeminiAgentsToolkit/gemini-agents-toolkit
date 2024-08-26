@@ -72,17 +72,24 @@ class GeminiAgentClient(object):
             self.on_message(response.text)
         # Extract the text from the final model response
         return response.text
-    
-
-def generate_chat_client_from_functions_package(package, model_name="gemini-1.5-pro", *, system_instruction="", debug=False, recreate_client_each_time=False, history_depth=-1, do_not_die=False, add_scheduling_functions=False, gcs_bucket=None, gcs_blob=None):
-    all_functions = [
-        func
-        for _, func in inspect.getmembers(package, inspect.isfunction)
-    ]
-    return generate_chat_client_from_functions_list(all_functions, model_name=model_name, system_instruction=system_instruction, debug=debug, recreate_client_each_time=recreate_client_each_time, history_depth=history_depth, do_not_die=do_not_die, add_scheduling_functions=add_scheduling_functions, gcs_bucket=gcs_bucket, gcs_blob=gcs_blob)
 
 
-def generate_chat_client_from_functions_list(all_functions, model_name="gemini-1.5-pro", *, system_instruction=None, debug=False, recreate_client_each_time=False, history_depth=-1, do_not_die=False, add_scheduling_functions=False, gcs_bucket=None, gcs_blob=None):
+def create_agent_from_functions_list(
+        all_functions, 
+        model_name="gemini-1.5-pro",
+        *, 
+        system_instruction=None, 
+        debug=False, 
+        recreate_client_each_time=False, 
+        history_depth=-1, 
+        do_not_die=False, 
+        add_scheduling_functions=False, 
+        gcs_bucket=None, 
+        gcs_blob=None,
+        delegation_function_prompt=None, 
+        delegates=None,
+        on_message=None
+    ):
     if (not gcs_bucket and gcs_blob) or (gcs_bucket and not gcs_blob):
         raise ValueError("Both gcs_bucket and gcs_blob must be provided")
     if add_scheduling_functions:
@@ -95,7 +102,17 @@ def generate_chat_client_from_functions_list(all_functions, model_name="gemini-1
         ])
     if debug:
         print(f"all_functions: {all_functions}")
-    clnt = GeminiAgentClient(tools=all_functions, model_name=model_name, system_instruction=system_instruction, debug=debug, recreate_client_each_time=recreate_client_each_time, history_depth=history_depth, do_not_die=do_not_die)
+    clnt = GeminiAgentClient(
+        delegation_function_prompt=delegation_function_prompt,
+        delegates=delegates,
+        on_message=on_message,
+        tools=all_functions, 
+        model_name=model_name, 
+        system_instruction=system_instruction, 
+        debug=debug, 
+        recreate_client_each_time=recreate_client_each_time, 
+        history_depth=history_depth, 
+        do_not_die=do_not_die)
     if add_scheduling_functions:
         scheduler_instance.set_gemini_client(clnt)
         scheduler_instance.start_scheduler()
