@@ -13,19 +13,11 @@ def say_to_duck(say: str):
     """say something to a duck"""
     return f"duck answer is: duck duck {say} duck duck duck"
 
+
 load_dotenv()
 genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
 
 all_functions = [get_current_time, say_to_duck]
-# clt = client.generate_chat_client_from_functions_list(all_functions)
-clt = client.generate_chat_client_from_functions_list(all_functions, debug=True, recreate_client_each_time=False, history_depth=4, do_not_die=False, add_scheduling_functions=True, gcs_bucket="gemini_jobs", gcs_blob="jobs.json")
+main_agent = client.generate_chat_client_from_functions_list(all_functions)
 
-print(clt.send_message("say to the duck message: I am hungry"))
-
-if __name__ == "__main__":
-    while True:
-        user_input = input("You: ")
-        if user_input == "exit":
-            break
-        response = clt.send_message(user_input)
-        print("Jessica:", response)
+print(main_agent.send_message("say to the duck message: I am hungry"))

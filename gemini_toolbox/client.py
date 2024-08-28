@@ -6,15 +6,15 @@ from gemini_toolbox import scheduler
 import logging
 
 
-class GeminiAgentClient(object):
+class GeminiAgent(object):
 
     def __init__(self, model_name="gemini-1.5-pro", *, tools=None, system_instruction=None, delegation_function_prompt=None, delegates=None, debug=False, recreate_client_each_time=False, history_depth=-1, do_not_die=False, on_message=None):
         if not tools:
             tools = []
         if delegates is not None:
             for delegate in delegates:
-                if not isinstance(delegate, GeminiAgentClient):
-                    raise ValueError("delegates must be a list of GeminiAgentClient instances")
+                if not isinstance(delegate, GeminiAgent):
+                    raise ValueError("delegates must be a list of GeminiAgent instances")
                 if not delegate._delegation_prompt_set:
                     raise ValueError("all delegates must have a delegation prompt specified set")
                 tools += [delegate.send_message]
@@ -102,7 +102,7 @@ def create_agent_from_functions_list(
         ])
     if debug:
         print(f"all_functions: {all_functions}")
-    clnt = GeminiAgentClient(
+    clnt = GeminiAgent(
         delegation_function_prompt=delegation_function_prompt,
         delegates=delegates,
         on_message=on_message,
