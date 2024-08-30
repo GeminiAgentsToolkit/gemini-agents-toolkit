@@ -1,7 +1,7 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from google.cloud import storage
-from gemini_toolbox.scheduler.task import LLMTask
+from gemini_agents_toolbox.scheduler.task import LLMTask
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 
 import json
