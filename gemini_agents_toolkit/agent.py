@@ -2,7 +2,7 @@ from vertexai.generative_models import (
     Part, GenerativeModel,
 )
 from vertexai.generative_models import FunctionDeclaration, Tool
-from gemini_agents_toolbox import scheduler
+from gemini_agents_toolkit import scheduler
 
 import logging
 import inspect

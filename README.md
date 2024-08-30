@@ -1,7 +1,7 @@
 SDK For Simplified usage of Gemini Agents. Give Gemini Ability to use your custom functions in seveal code lines:
 
 ```python
-from gemini_agents_toolbox import agent
+from gemini_agents_toolkit import agent
 
 import vertexai
 
@@ -22,7 +22,7 @@ print(duck_comms_agent.send_message("say to the duck message: I am hungry"))
 Here is more complex example of several agents that delegating tasks to each other:
 
 ```python
-from gemini_agents_toolbox import agent
+from gemini_agents_toolkit import agent
 
 import vertexai
 
@@ -63,7 +63,7 @@ print(main_agent.send_message("can you tell me what time it is?"))
 Example of how you can call periodic task:
 
 ```python
-from gemini_agents_toolbox import agent
+from gemini_agents_toolkit import agent
 import time
 
 import vertexai

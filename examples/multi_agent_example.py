@@ -1,4 +1,4 @@
-from gemini_agents_toolbox import agent
+from gemini_agents_toolkit import agent
 
 import vertexai
 
