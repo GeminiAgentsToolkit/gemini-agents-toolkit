@@ -11,7 +11,7 @@ class ScheduledTaskExecutor:
     
     def __init__(self, *, debug=False, gcs_bucket=None, gcs_blob=None):
         """
-        Initializes the ScheduledTaskExecutor with the given GeminiChatClient instance.
+        Initializes the ScheduledTaskExecutor with the given GeminiAgent instance.
         """
         self.scheduler = BackgroundScheduler({
             'apscheduler.executors.default': {
@@ -24,17 +24,17 @@ class ScheduledTaskExecutor:
             },
         })
         self.debug = debug
-        self.gemini_chat_client = None
+        self.gemini_agent = None
         self.tasks = []
         self.gcs_bucket = gcs_bucket
         self.gcs_blob = gcs_blob
 
-    def set_gemini_client(self, gemini_chat_client):
-        self.gemini_chat_client = gemini_chat_client
+    def set_gemini_agent(self, gemini_agent):
+        self.gemini_agent = gemini_agent
 
     def start_scheduler(self):
-        if self.gemini_chat_client is None:
-            raise ValueError("GeminiChatClient instance is required to start")
+        if self.gemini_agent is None:
+            raise ValueError("GeminiAgent instance is required to start")
         self.scheduler.start()
         if self.gcs_blob:
             self._download_json_from_gcs()
@@ -57,14 +57,8 @@ class ScheduledTaskExecutor:
         Returns all the jobs currently scheduled in the scheduler. If user asks about periodic tasks/jobs/etc this function should be used.
         """
         return [ task.__dict__ for task in self.tasks ]
-    # 
-    # IMPORTANT: keep in mind that this prompt will be send to LLM/you as if it is comming from the user! This is importnat becuase you need to refactor user prompt and not to be sending it as is. For exmple
-    # If user sends "I want you to send me a message 'You are awesome'" you can NOT use prompt "you are awesome", becuase this promopt will go to YOU!
-    # so you will get message "you are awesome!". So the prompt should be something like: "can you send me message 'You are awesome' with the function to send messages and generate text DONE"
-    # Since prompt is send from the job scheuler andy directly generated text back will NOT be read by user, if user provided any function that can send message back to them
-    # that functions should be used intested. but in order to use it you have to explicitly ASK it in the promopt.
 
-    def add_daily_task(self, prompt: str, *, precondition_prompt: str = None, negative_prompt: str = None):
+    def add_task(self, prompt: str, *, precondition_prompt: str = None, negative_prompt: str = None, frequency='daily'):
         """
         Adds a new daily task to the scheduler. It will be executed once per day.
         All input prompts should be done in a natural language it will be sent to GPT/Gemini like LLM to be processed as is.
@@ -75,29 +69,18 @@ class ScheduledTaskExecutor:
             if not precondition exists, the prompt will be executed directly.
             precondition_prompt: The prompt to verify the precondition before executing the task.
             negative_prompt: The prompt to be executed if the precondition is not met.
+            frequency: The frequency of the task, ONLY supported: minute or daily. Default is 'daily'.
         """
-        task = LLMTask(prompt, precondition_prompt=precondition_prompt, negative_prompt=negative_prompt, frequency='daily')
-        return self._add_task(task, CronTrigger(hour='1'))
-
-    def add_minute_task(self, prompt: str, *, precondition_prompt: str = None, negative_prompt: str = None):
-        """
-        Adds a new minute task to the scheduler. It will be executed once per minute.
-        All input prompts should be done in a natural language it will be sent to GPT/Gemini like LLM to be processed as is.
-        In the prompts do not explicitly use funcitons name, assume that prompt is the message that use might have typed and sent to do the action, and user does not know which funcitons exist.
-        
-        Args:
-            prompt: The prompt to be executed as part of the task. If precondition exists it will be executed after the precondition is met.
-            if not precondition exists, the prompt will be executed directly.
-            precondition_prompt: The prompt to verify the precondition before executing the task.
-            negative_prompt: The prompt to be executed if the precondition is not met.
-        """
-        task = LLMTask(prompt, precondition_prompt=precondition_prompt, negative_prompt=negative_prompt, frequency='minute')
-        return self._add_task(task, CronTrigger(hour='*', minute='*'))
+        if frequency != 'daily' and frequency != 'minute':
+            raise ValueError("Only daily and minute frequencies are supported")
+        task = LLMTask(prompt, precondition_prompt=precondition_prompt, negative_prompt=negative_prompt, frequency=frequency)
+        cron_trigger = CronTrigger(hour='1') if frequency == 'daily' else CronTrigger(hour='*', minute='*')
+        return self._add_task(task, cron_trigger)
     
     def _add_task(self, task, cron_trigger, upload_to_gcs=True):
-        gemini_chat_client = self.gemini_chat_client
+        gemini_agent = self.gemini_agent
         debug = self.debug
-        task.id = self.scheduler.add_job(execute_task, cron_trigger, args=[gemini_chat_client, task, debug]).id
+        task.id = self.scheduler.add_job(execute_task, cron_trigger, args=[gemini_agent, task, debug]).id
         self.tasks.append(task)
         if self.gcs_blob and upload_to_gcs:
             self._upload_json_to_gcs()
@@ -147,10 +130,10 @@ class ScheduledTaskExecutor:
     @staticmethod
     def _parse_boolean_response(response):
         """
-        Parses the response from the GeminiChatClient to extract a boolean value.
+        Parses the response from the GeminiAgent to extract a boolean value.
 
         Args:
-            response: The text response from the GeminiChatClient.
+            response: The text response from the GeminiAgent.
 
         Returns:
             bool: True if the response indicates the precondition is met, False otherwise.
@@ -161,7 +144,7 @@ class ScheduledTaskExecutor:
         return "true" in response.lower() 
 
 
-def execute_task(gemini_chat_client, task, debug):
+def execute_task(gemini_agent, task, debug):
     """
     Evaluates the precondition (if any) and executes the rule if the conditions are met.
 
@@ -178,15 +161,15 @@ def execute_task(gemini_chat_client, task, debug):
             "to verify if this precondition is still met or not and return True/False."
         )
 
-        # Send the verification prompt to the GeminiChatClient
-        response = gemini_chat_client.send_message(verification_prompt)
+        # Send the verification prompt to the GeminiAgent
+        response = gemini_agent.send_message(verification_prompt)
 
         # Parse the response to extract the boolean value
         is_precondition_met = ScheduledTaskExecutor._parse_boolean_response(response)
 
         if is_precondition_met:
-            gemini_chat_client.send_message(task.prompt)
+            gemini_agent.send_message(task.prompt)
         else:
-            gemini_chat_client.send_message(task.negative_prompt)
+            gemini_agent.send_message(task.negative_prompt)
     else:
-        gemini_chat_client.send_message(task.prompt)
+        gemini_agent.send_message(task.prompt)

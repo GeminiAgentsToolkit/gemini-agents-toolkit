@@ -12,19 +12,14 @@ def read_requirements():
 install_requires = read_requirements()
 
 setup(
-    name='gemini_toolbox',
-    version='1.1.0',
+    name='gemini_agents_toolkit',
+    version='2.0.0',
     packages=find_packages(),
-    description='Toolbox For Using Gemini Agents SDK',
+    description='Toolkit For Creating Gemini Based Agents',
     long_description_content_type='text/markdown',
     long_description=open('README.md').read(),
     author='Viacheslav Kovalevskyi',
     author_email='viacheslav@kovalevskyi.com',
-    entry_points={
-        'console_scripts': [
-            'gt = gemini_toolbox.bin.pipe:main',  
-        ],
-    },
     license='MIT',
     install_requires=install_requires
 )
