@@ -6,6 +6,7 @@ from gemini_agents_toolkit import scheduler
 
 import logging
 import inspect
+import traceback
 
 
 class GeminiAgent(object):
@@ -57,11 +58,17 @@ class GeminiAgent(object):
                 # Call the function with the extracted arguments
                 return func(**args)
             except TypeError as e:
-                return {"error": f"Invalid arguments for function {function_call.name}: {e}"}
+                stack_trace = traceback.format_exc()
+                logging.error(f"Invalid arguments for function {function_call.name}: {e}\n{stack_trace}")
+                return {"error": f"Invalid arguments for function {function_call.name}: {e}\n{stack_trace}"}
             except ValueError as e:
-                return {"error": f"Value error during function call {function_call.name}: {e}"}
+                stack_trace = traceback.format_exc()
+                logging.error(f"Value error during function call  {function_call.name}: {e}\n{stack_trace}")
+                return {"error": f"Value error during function call {function_call.name}: {e}\n{stack_trace}"}
             except Exception as e:
-                return {"error": f"Unexpected error during function call {function_call.name}: {e}"}
+                stack_trace = traceback.format_exc()
+                logging.error(f"Unexpected error during function call {function_call.name}: {e}\n{stack_trace}")
+                return {"error": f"Unexpected error during function call {function_call.name}: {e}\n{stack_trace}"}
         else:
             return {"error": "Function not found"}
         
