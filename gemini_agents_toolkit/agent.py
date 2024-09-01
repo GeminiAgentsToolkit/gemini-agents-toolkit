@@ -27,7 +27,10 @@ class GeminiAgent(object):
                 tool_name = f"delegate_{i}_send_message"
                 self.functions[tool_name] = delegate.send_message
                 func_declarations.append(_generate_function_declaration(delegate.send_message, user_set_name=tool_name, user_set_description=delegate.delegation_function_prompt))
-        self._model = GenerativeModel(model_name=model_name, tools=[Tool(function_declarations=func_declarations)], system_instruction=system_instruction)
+        tools = None
+        if func_declarations:
+            tools = [Tool(function_declarations=func_declarations)]
+        self._model = GenerativeModel(model_name=model_name, tools=tools, system_instruction=system_instruction)
         self.chat = self._model.start_chat()
         self.debug = debug
         self.recreate_client_each_time = recreate_client_each_time
