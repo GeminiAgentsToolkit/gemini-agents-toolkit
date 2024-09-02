@@ -7,10 +7,14 @@ class IfStep(BasicStep):
         super().__init__(agent, prompt, name, debug)
         if isinstance(if_step, str):
             self.if_step = BasicStep(agent, if_step)
+        while if_step.previous_step:
+            if_step = if_step.previous_step
         if_step.previous_step = self
         self.if_step = if_step
         if isinstance(else_step, str):
             self.else_step = BasicStep(agent, else_step)
+        while else_step.previous_step:
+            else_step = else_step.previous_step
         else_step.previous_step = self
         self.else_step = else_step
         if self.debug:

@@ -32,6 +32,8 @@ class AbstractStep(object):
         pass
 
     def set_next_step(self, step):
+        while step.previous_step:
+            step = step.previous_step
         if not self._next_step:
             self._next_step = step
             step.previous_step = self

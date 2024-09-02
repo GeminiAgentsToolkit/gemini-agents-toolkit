@@ -82,13 +82,13 @@ vertexai.init(project="gemini-trading-backend", location="us-west1")
 all_functions = [check_if_limit_sell_order_exists, cancel_limit_sell_order, set_limit_sell_order, check_current_tqqq_price, check_if_limit_buy_order_exists, get_current_limit_buy_price, cancel_limit_buy_order, set_limit_buy_order, check_how_many_shares_i_own]
 investor_agent = agent.create_agent_from_functions_list(functions=all_functions, model_name="gemini-1.5-pro")
 
-check_price_and_set_sell_limit = BasicStep(investor_agent, "check current price of TQQQ")
-(check_price_and_set_sell_limit.next_step("set limit sell order for TQQQ for price +4% of current price")
+check_price_and_set_sell_limit = (BasicStep(investor_agent, "check current price of TQQQ")
+                                  .next_step("set limit sell order for TQQQ for price +4% of current price")
                                   .final_step_summary())
 check_if_limit_sell_existst_step = IfStep(investor_agent, "is there a limit sell exists already", if_step=SummaryStep(investor_agent), else_step=check_price_and_set_sell_limit)
 
-set_limit_buy_order_step = BasicStep(investor_agent, "check current price of TQQQ")
-(set_limit_buy_order_step.next_step("set limit buy order for TQQQ for price 3 precent below the current price. Do not return compute formula, do compute of the price yourself in your head")
+set_limit_buy_order_step = (BasicStep(investor_agent, "check current price of TQQQ")
+                            .next_step("set limit buy order for TQQQ for price 3 precent below the current price. Do not return compute formula, do compute of the price yourself in your head")
                             .final_step_summary())
 
 recreate_limit_buy_order_step = BasicStep(investor_agent, "cancel limit buy order")
