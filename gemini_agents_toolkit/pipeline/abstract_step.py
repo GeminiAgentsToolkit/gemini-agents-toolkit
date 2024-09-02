@@ -1,7 +1,7 @@
 class AbstractStep(object):
 
     def __init__(self, name: str = None, debug: bool = False):
-        self.next_step = None
+        self._next_step = None
         self.previous_step = None
         self.executed = False
         self.debug = debug
@@ -19,10 +19,10 @@ class AbstractStep(object):
         if self.debug:
             print(f"New data: {new_data}")
         self.executed = True
-        if self.next_step:
+        if self._next_step:
             if self.debug:
-                print(f"Chaining to next step: {self.next_step.name}")
-            return self.next_step.execute(new_data)
+                print(f"Chaining to next step: {self._next_step.name}")
+            return self._next_step.execute(new_data)
         else:
             if self.debug:
                 print("No more steps to chain to")
@@ -31,10 +31,16 @@ class AbstractStep(object):
     def run(self, data):
         pass
 
+    def set_next_step(self, step):
+        if not self._next_step:
+            self._next_step = step
+            step.previous_step = self
+            return step
+        else:
+            raise ValueError("Next step already exists")
+
     def __or__(self, other):
         if isinstance(other, AbstractStep):
-            self.next_step = other
-            other.previous_step = self
-            return other
+            return self.set_next_step(other)
         else:
             raise ValueError("Can only chain steps with other steps")
