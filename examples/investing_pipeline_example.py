@@ -77,7 +77,7 @@ def check_how_many_shares_i_own():
 vertexai.init(project="gemini-trading-backend", location="us-west1")
 
 all_functions = [check_if_limit_sell_order_exists, cancel_limit_sell_order, set_limit_sell_order, check_current_tqqq_price, check_if_limit_buy_order_exists, get_current_limit_buy_price, cancel_limit_buy_order, set_limit_buy_order, check_how_many_shares_i_own]
-investor_agent = agent.create_agent_from_functions_list(functions=all_functions, model_name="gemini-1.5-pro")
+investor_agent = agent.create_agent_from_functions_list(functions=all_functions, model_name="gemini-1.5-flash")
 
 pipeline_builder = PipelineBuilder(investor_agent)
 
@@ -112,22 +112,3 @@ root_setp = pipeline_builder.if_step(
 )
 
 print(root_setp.execute()) 
-
-# check_price_and_set_sell_limit = (BasicStep(investor_agent, "check current price of TQQQ")
-#                                   .then("set limit sell order for TQQQ for price +4% of current price")
-#                                   .summary())
-# check_if_limit_sell_existst_step = IfStep(investor_agent, "is there a limit sell exists already", then_step=SummaryStep(investor_agent), else_step=check_price_and_set_sell_limit)
-
-# set_limit_buy_order_step = (BasicStep(investor_agent, "check current price of TQQQ")
-#                             .then("set limit buy order for TQQQ for price 3 precent below the current price. Do not return compute formula, do compute of the price yourself in your head")
-#                             .summary())
-
-# recreate_limit_buy_order_step = BasicStep(investor_agent, "cancel limit buy order")
-# recreate_limit_buy_order_step.then("set limit buy order for TQQQ for price 3 precent below the current price. Do not return compute formula, do compute of the price yourself in your head")
-
-# maybe_recreate_limit_buy_order_step = IfStep(investor_agent, "is there current limit buy price lower than curent price of TQQQ -5%?", then_step=recreate_limit_buy_order_step, else_step=SummaryStep(investor_agent))
-
-# check_if_limit_buy_order_exists_step = IfStep(investor_agent, "is there a limit buy exists already", then_step=maybe_recreate_limit_buy_order_step, else_step=set_limit_buy_order_step)
-# check_if_i_own_30_shares_step = IfStep(investor_agent, "chec if I own more than 30 shares of TQQQ", then_step=check_if_limit_sell_existst_step, else_step=check_if_limit_buy_order_exists_step)
-
-# print(check_if_i_own_30_shares_step.execute())
