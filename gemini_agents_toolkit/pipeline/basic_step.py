@@ -3,7 +3,7 @@ from gemini_agents_toolkit.agent import GeminiAgent
 
 
 class BasicStep(AbstractStep):
-    def __init__(self, agent: GeminiAgent, prompt: str, name:str = None, debug: bool = False):
+    def __init__(self, agent: GeminiAgent, prompt: str, *, name:str = None, debug: bool = False):
         super().__init__(name=name, debug=debug)
         self.agent = agent
         self.prompt = prompt
@@ -15,16 +15,16 @@ class BasicStep(AbstractStep):
             print("prompt to send: " + prompt)
         return self.agent.send_message(prompt)
     
-    def next_if_step(self, prompt, if_step, else_step):
+    def then_if(self, prompt, then_step, else_step):
         from gemini_agents_toolkit.pipeline.if_step import IfStep
-        next_step = IfStep(self.agent, prompt, if_step, else_step, debug=self.debug)
+        next_step = IfStep(self.agent, prompt, then_step, else_step, debug=self.debug)
         return self.set_next_step(next_step)
 
-    def next_step(self, next_step):
+    def then(self, next_step):
         if isinstance(next_step, str):
             next_step = BasicStep(self.agent, next_step, debug=self.debug)
         return self.set_next_step(next_step)
 
-    def final_step_summary(self):
+    def summary(self):
         from gemini_agents_toolkit.pipeline.summary_step import SummaryStep
         return self.set_next_step(SummaryStep(self.agent, debug=self.debug))
