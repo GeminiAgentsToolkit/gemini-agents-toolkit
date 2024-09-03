@@ -13,7 +13,7 @@ install_requires = read_requirements()
 
 setup(
     name='gemini_agents_toolkit',
-    version='2.1.0',
+    version='2.2.0',
     packages=find_packages(),
     description='Toolkit For Creating Gemini Based Agents',
     long_description_content_type='text/markdown',

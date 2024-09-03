@@ -7,6 +7,7 @@ from gemini_agents_toolkit import scheduler
 import logging
 import inspect
 import traceback
+import re
 
 
 class GeminiAgent(object):
@@ -131,33 +132,43 @@ class GeminiAgent(object):
 
     
 def _generate_function_declaration(func, *, user_set_name=None, user_set_description=None):
-    func_name = user_set_name
-    if not func_name:
-        # Extract function name
-        func_name = func.__name__
-    
-    func_doc = user_set_description
-    if not func_doc:
-        # Extract function docstring
-        func_doc = func.__doc__ if func.__doc__ else ""
-    
-    # Extract function parameters
+    func_name = user_set_name or func.__name__
+    func_doc = user_set_description or (func.__doc__ or "")
+
     sig = inspect.signature(func)
     params = {
         "type": "object",
         "properties": {}
     }
+
+    # Parse parameter descriptions from docstring using regex
+    param_descriptions = {}
+    if func_doc:
+        param_pattern = re.compile(r":param\s+(\w+):\s*(.*)")
+        for match in param_pattern.finditer(func_doc):
+            param_name, description = match.groups()
+            param_descriptions[param_name] = description.strip()
+
     for name, param in sig.parameters.items():
-        # Assuming all parameters are strings for simplicity; you can enhance this as needed
-        params["properties"][name] = {"type": "string", "description": "No description provided"}
-    
-    # Create FunctionDeclaration
+        type_mapping = {
+            int: "integer",
+            float: "number",
+            str: "string",
+            # Add more mappings as needed
+        }
+        param_type = type_mapping.get(param.annotation, "string")
+
+        params["properties"][name] = {
+            "type": param_type,
+            "description": param_descriptions.get(name, "No description provided")
+        }
+
     function_declaration = FunctionDeclaration(
         name=func_name,
         description=func_doc,
         parameters=params
     )
-    
+
     return function_declaration
 
 
