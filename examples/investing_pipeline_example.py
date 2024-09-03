@@ -86,42 +86,10 @@ if not pipeline.boolean_step("check if I own more than 30 shares of TQQQ"):
         if pipeline.boolean_step("is there a limit buy exists already?"):
             if not pipeline.boolean_step("is there current limit buy price lower than curent price of TQQQ -5%?"):
                 pipeline.step("cancel limit buy order")
-                pipeline.step("set limit buy order for TQQQ for price 3 precent below the current price. Do not return compute formula, do compute of the price yourself in your head")
+                pipeline.step("""set limit buy order for TQQQ for price 3 precent below the current price. 
+                              Do not return compute formula, do compute of the price yourself in your head""")
         else:
-            pipeline.step("set limit buy order for TQQQ for price 3 precent below the current price. Do not return compute formula, do compute of the price yourself in your head")
+            pipeline.step("""set limit buy order for TQQQ for price 3 precent below the current price. 
+                          Do not return compute formula, do compute of the price yourself in your head""")
 
 print(pipeline.summary())
-
-
-
-# root_setp = pipeline_builder.if_step(
-#     "check if I own more than 30 shares of TQQQ",
-#     then_step=pipeline_builder.if_step(
-#         "is there a limit sell exists already",
-#         then_step=pipeline_builder.summary_step(), 
-#         else_step=(
-#             pipeline_builder.basic_step("check current price of TQQQ")
-#             .then("set limit sell order for TQQQ for price +4% of current price")
-#             .summary()
-#         )
-#     ),
-#     else_step=pipeline_builder.if_step(
-#         "is there a limit buy exists already",
-#         then_step=(
-#             pipeline_builder.if_step("is there current limit buy price lower than curent price of TQQQ -5%?", 
-#                 then_step=(
-#                     pipeline_builder.basic_step("cancel limit buy order")
-#                     .then("set limit buy order for TQQQ for price 3 precent below the current price. Do not return compute formula, do compute of the price yourself in your head")
-#                 ), 
-#                 else_step=pipeline_builder.summary_step()
-#             )
-#         ),
-#         else_step=(
-#             pipeline_builder.basic_step("check current price of TQQQ")
-#             .then("set limit buy order for TQQQ for price 3 precent below the current price. Do not return compute formula, do compute of the price yourself in your head")
-#             .summary()
-#         )
-#     )
-# )
-
-# print(root_setp.execute()) 
