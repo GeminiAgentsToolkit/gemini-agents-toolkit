@@ -3,6 +3,19 @@ class EagerPipeline(object):
         self.agent = agent
         self.prev_step_data = None
 
+    def if_step(self, prompt, then_steps, else_steps):
+        if self.boolean_step(prompt):
+            self.steps(then_steps)
+        else:
+            self.steps(else_steps)
+
+    def steps(self, steps):
+        if isinstance(steps, list):
+            for step in steps:
+                self.step(step)
+        else:
+            self.step(steps)
+
     def step(self, prompt):
         prompt = f"""this is one step in the pipeline, this steps are user command but not comming direclty from the user:
         user prompt: {prompt}
