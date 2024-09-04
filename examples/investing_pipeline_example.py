@@ -23,7 +23,7 @@ def cancel_limit_sell_order():
 
 
 def set_limit_sell_order(price: float):
-    """Set limit sell order
+    """Set limit sell order. Price is float and it can not be a formula or logic that prints formula, input HAS to be fully computed price.
     
     Args:
         price: Price to set limit sell order"""
@@ -58,7 +58,7 @@ def cancel_limit_buy_order():
 
 
 def set_limit_buy_order(price: float):
-    """Set limit buy order
+    """Set limit buy order. Price is float and it can not be a formula or logic that prints formula, input HAS to be fully computed price.
     
     Args:
         price: Price to set limit buy order"""
@@ -83,6 +83,7 @@ if not pipeline.boolean_step("check if I own more than 30 shares of TQQQ"):
         pipeline.step("check current price of TQQQ")
         pipeline.step("set limit sell order for TQQQ for price +4% of current price")
     else:
+        print("everywhere")
         if pipeline.boolean_step("is there a limit buy exists already?"):
             if not pipeline.boolean_step("is there current limit buy price lower than curent price of TQQQ -5%?"):
                 pipeline.step("cancel limit buy order")
@@ -91,5 +92,4 @@ if not pipeline.boolean_step("check if I own more than 30 shares of TQQQ"):
         else:
             pipeline.step("""set limit buy order for TQQQ for price 3 precent below the current price. 
                           Do not return compute formula, do compute of the price yourself in your head""")
-
 print(pipeline.summary())

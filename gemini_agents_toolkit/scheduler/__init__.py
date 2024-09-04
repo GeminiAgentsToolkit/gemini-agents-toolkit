@@ -69,12 +69,14 @@ class ScheduledTaskExecutor:
             if not precondition exists, the prompt will be executed directly.
             precondition_prompt: The prompt to verify the precondition before executing the task.
             negative_prompt: The prompt to be executed if the precondition is not met.
-            frequency: The frequency of the task, ONLY supported: minute or daily. Default is 'daily'.
+            frequency: The frequency of the task, ONLY supported: daily or 4_times_a_day. Default is 'daily'.
         """
-        if frequency != 'daily' and frequency != 'minute':
+        if frequency != 'daily' and frequency != 'minute' and frequency != '4_times_a_day':
             raise ValueError("Only daily and minute frequencies are supported")
         task = LLMTask(prompt, precondition_prompt=precondition_prompt, negative_prompt=negative_prompt, frequency=frequency)
-        cron_trigger = CronTrigger(hour='1') if frequency == 'daily' else CronTrigger(hour='*', minute='*')
+        cron_trigger = CronTrigger(hour='*/4') if frequency == '4_times_a_day' else CronTrigger(hour='1') 
+        if frequency == 'minute':
+            cron_trigger = CronTrigger(hour='*', minute='*')
         return self._add_task(task, cron_trigger)
     
     def _add_task(self, task, cron_trigger, upload_to_gcs=True):
@@ -119,6 +121,8 @@ class ScheduledTaskExecutor:
                 self._add_task(task, CronTrigger(hour='1'), upload_to_gcs=False)
             elif task.frequency == 'minute':
                 self._add_task(task, CronTrigger(hour='*', minute='*'), upload_to_gcs=False)
+            elif task.frequency == '4_times_a_day':
+                self._add_task(task, CronTrigger(hour='*/4'), upload_to_gcs=False)
 
     def save_jobs_to_gcs(self):
         """

@@ -1,7 +1,7 @@
 from vertexai.generative_models import (
     Part, GenerativeModel,
 )
-from vertexai.generative_models import FunctionDeclaration, Tool
+from vertexai.generative_models import FunctionDeclaration, Tool, HarmCategory, HarmBlockThreshold, SafetySetting
 from gemini_agents_toolkit import scheduler
 
 import logging
@@ -31,7 +31,29 @@ class GeminiAgent(object):
         tools = None
         if func_declarations:
             tools = [Tool(function_declarations=func_declarations)]
-        self._model = GenerativeModel(model_name=model_name, tools=tools, system_instruction=system_instruction)
+        safety_config = [
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                threshold=HarmBlockThreshold.BLOCK_ONLY_HIGH,
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold=HarmBlockThreshold.BLOCK_ONLY_HIGH,
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                threshold=HarmBlockThreshold.BLOCK_ONLY_HIGH,
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                threshold=HarmBlockThreshold.BLOCK_ONLY_HIGH,
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_UNSPECIFIED,
+                threshold=HarmBlockThreshold.BLOCK_ONLY_HIGH,
+            ),
+        ]
+        self._model = GenerativeModel(model_name=model_name, tools=tools, system_instruction=system_instruction, safety_settings=safety_config)
         self.chat = self._model.start_chat()
         self.debug = debug
         self.recreate_client_each_time = recreate_client_each_time
