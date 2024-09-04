@@ -5,9 +5,11 @@ class EagerPipeline(object):
 
     def if_step(self, prompt, then_steps, else_steps):
         if self.boolean_step(prompt):
-            self.steps(then_steps)
+            if then_steps:
+                self.steps(then_steps)
         else:
-            self.steps(else_steps)
+            if else_steps:
+                self.steps(else_steps)
 
     def steps(self, steps):
         if isinstance(steps, list):
