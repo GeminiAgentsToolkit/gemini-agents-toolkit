@@ -1,9 +1,13 @@
 class EagerPipeline(object):
-    def __init__(self, agent):
+    def __init__(self, agent, logger=None):
         self.agent = agent
         self.prev_step_data = None
+        self.logger = logger
+
 
     def if_step(self, prompt, then_steps, else_steps):
+        if self.logger:
+            self.logger.info(f"if_step: {prompt}, then_steps: {then_steps}, else_steps: {else_steps}") 
         if self.boolean_step(prompt):
             if then_steps:
                 self.steps(then_steps)
@@ -19,6 +23,8 @@ class EagerPipeline(object):
             self.step(steps)
 
     def step(self, prompt):
+        if self.logger:
+            self.logger.info(f"step: {prompt}")
         prompt = f"""this is one step in the pipeline, this steps are user command but not comming direclty from the user:
         user prompt: {prompt}
         data from prev steps: {self.prev_step_data}"""
@@ -26,6 +32,8 @@ class EagerPipeline(object):
         return self.prev_step_data
     
     def boolean_step(self, prompt):
+        if self.logger:
+            self.logger.info(f"boolean_step: {prompt}")
         prompt = f"""this is one step in the pipeline, this steps are user command but not comming direclty from the user:
         Following prompt provided by user, and user expects this to compute in a boolean yes/no answer, you have to retunr
         True/False and nothing else in your response. 
@@ -35,13 +43,19 @@ class EagerPipeline(object):
         IMPORTANT: remember you ONLY can return True/False"""
         bool_answer = self.agent.send_message(prompt)
         if "true" in bool_answer.lower():
+            if self.logger:
+                self.logger.info(f"boolean_step: True")
             return True
         elif "false" in bool_answer.lower():
+            if self.logger:
+                self.logger.info(f"boolean_step: False")
             return False
         else:
             raise ValueError("Invalid response from user, expected True/False only")
         
     def summary(self):
+        if self.logger:
+            self.logger.info(f"summary")
         prompt = f"""Now if the final step of the pipeline/dialog, provide summary of main things that were done and why.
         do not omit any steps, and only print key details. This dialog was a pipline so do not assume user knows about
         any messages even if they were comming from the user before, now is the time to build proper summary for a user.
