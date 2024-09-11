@@ -1,6 +1,10 @@
 tmp.py
 gemini/
 .env/
+.idx/
+.github/
+.venv/
+.vscode/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
