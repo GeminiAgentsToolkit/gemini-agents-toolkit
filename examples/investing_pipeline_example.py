@@ -1,3 +1,4 @@
+import config.config as config
 from gemini_agents_toolkit import agent
 from gemini_agents_toolkit.pipeline.eager_pipeline import EagerPipeline
 
@@ -72,12 +73,12 @@ def check_how_many_shares_i_own():
     return 30 + random.randint(-20, 1)
 
 
-vertexai.init(project="gemini-trading-backend", location="us-west1")
+vertexai.init(project=config.project_id, location=config.region)
 
 all_functions = [check_if_limit_sell_order_exists, cancel_limit_sell_order, set_limit_sell_order, check_current_tqqq_price, check_if_limit_buy_order_exists, get_current_limit_buy_price, cancel_limit_buy_order, set_limit_buy_order, check_how_many_shares_i_own]
-investor_agent = agent.create_agent_from_functions_list(functions=all_functions, model_name="gemini-1.5-pro")
+investor_agent = agent.create_agent_from_functions_list(functions=all_functions, model_name=config.default_model)
 
-pipeline = EagerPipeline(investor_agent)
+pipeline = EagerPipeline(default_agent=investor_agent)
 if not pipeline.boolean_step("check if I own more than 30 shares of TQQQ"):
     if not pipeline.boolean_step("is there a limit sell for TQQQ exists already?"):
         pipeline.step("check current price of TQQQ")

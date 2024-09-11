@@ -1,3 +1,4 @@
+import config.config as config
 from vertexai.generative_models import (
     Part, GenerativeModel,
 )
@@ -12,7 +13,7 @@ import re
 
 class GeminiAgent(object):
 
-    def __init__(self, model_name="gemini-1.5-pro", *, functions=None, system_instruction=None, delegation_function_prompt=None, delegates=None, debug=False, recreate_client_each_time=False, history_depth=-1, on_message=None):
+    def __init__(self, model_name=config.default_model, *, functions=None, system_instruction=None, delegation_function_prompt=None, delegates=None, debug=False, recreate_client_each_time=False, history_depth=-1, on_message=None):
         if not functions:
             functions = []
         self.functions = {func.__name__: func for func in functions}
@@ -196,7 +197,7 @@ def _generate_function_declaration(func, *, user_set_name=None, user_set_descrip
 
 def create_agent_from_functions_list(
         *, 
-        model_name="gemini-1.5-pro",
+        model_name=config.default_model,
         functions=[],
         system_instruction=None, 
         debug=False, 
