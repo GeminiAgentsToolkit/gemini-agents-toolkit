@@ -1,5 +1,5 @@
+import config.config as config
 import sys
-import os
 
 import google.generativeai as genai
 
@@ -17,9 +17,9 @@ def generate_client():
 	    "if you asked to update something most likely you need to show same data stracture but updated, in the same format. Do not show HOW to update data structure, update it and output the result.",
 	    "Here is how you might be used by user: cat file | you -p \"prompt\" >> result"
     ]
-    genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
+    genai.configure(api_key=config.api_key)
 
-    return GenerativeModel(model_name="gemini-1.5-pro", system_instruction=system_instruction)
+    return GenerativeModel(model_name=config.default_model, system_instruction=system_instruction)
 
 gemini_model = generate_client()
 
