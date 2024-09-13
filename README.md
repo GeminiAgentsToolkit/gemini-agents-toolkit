@@ -279,10 +279,10 @@ Find more advanced examples in the `examples` directory.
 ## 💡How To Contribute
 ### If you want to be a code contributor
 - Just pick up a task from the Issues in this repository, assign it to you and raise a pull request with proposed changes.
-- If you need help, join the [Discord](https://discord.com/invite/ExCyb8Bb) and ask for help. The contributors team will be happy to see you!
+- If you need help, join the [Discord](https://discord.gg/qPWcJhgAx4) and ask for help. The contributors team will be happy to see you!
 
 ### If you want to contribute ideas or participate discussions
-Feel free to join our [Discord](https://discord.com/invite/ExCyb8Bb), where you can discuss the project with the contributors and probably impact on the way the project evolves. 
+Feel free to join our [Discord](https://discord.gg/qPWcJhgAx4), where you can discuss the project with the contributors and probably impact on the way the project evolves. 
 
 ---
 [Back to top](#gemini-agents-toolkit)
