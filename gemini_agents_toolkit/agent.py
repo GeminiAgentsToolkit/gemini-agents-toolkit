@@ -1,34 +1,58 @@
-import config.config as config
-from vertexai.generative_models import (
-    Part, GenerativeModel,
-)
-from vertexai.generative_models import FunctionDeclaration, Tool, HarmCategory, HarmBlockThreshold, SafetySetting
-from gemini_agents_toolkit import scheduler
+"""An agent for executing user's instructions"""
 
 import logging
 import inspect
 import traceback
 import re
+from vertexai.generative_models import Part, GenerativeModel
+from vertexai.generative_models import (
+    FunctionDeclaration,
+    Tool,
+    HarmCategory,
+    HarmBlockThreshold,
+    SafetySetting
+)
+from config import (DEFAULT_MODEL)
+from gemini_agents_toolkit import scheduler
 
 
-class GeminiAgent(object):
+# pylint: disable-next=too-many-instance-attributes
+class GeminiAgent:
+    """An agent to request LLM for executing users instructions with tools (custom functions) provided by user"""
 
-    def __init__(self, model_name=config.default_model, *, functions=None, system_instruction=None, delegation_function_prompt=None, delegates=None, debug=False, recreate_client_each_time=False, history_depth=-1, on_message=None):
+    # pylint: disable-next=too-many-instance-attributes, too-many-arguments, too-many-locals
+    def __init__(
+            self,
+            model_name=DEFAULT_MODEL,
+            *,
+            functions=None,
+            system_instruction=None,
+            delegation_function_prompt=None,
+            delegates=None,
+            debug=False,
+            recreate_client_each_time=False,
+            history_depth=-1,
+            on_message=None
+    ):
         if not functions:
             functions = []
         self.functions = {func.__name__: func for func in functions}
-        func_declarations =  [_generate_function_declaration(func) for func in functions]
+        func_declarations = [_generate_function_declaration(func) for func in functions]
         if delegates is not None:
             for i, delegate in enumerate(delegates):
                 if not isinstance(delegate, GeminiAgent):
                     raise ValueError("delegates must be a list of GeminiAgent instances")
                 if not delegate.delegation_function_prompt:
                     raise ValueError("all delegates must have a delegation prompt specified set")
-                
+
                 # Get the signature of the original send_message method
                 tool_name = f"delegate_{i}_send_message"
                 self.functions[tool_name] = delegate.send_message
-                func_declarations.append(_generate_function_declaration(delegate.send_message, user_set_name=tool_name, user_set_description=delegate.delegation_function_prompt))
+                func_declarations.append(
+                    _generate_function_declaration(
+                        delegate.send_message,
+                        user_set_name=tool_name,
+                        user_set_description=delegate.delegation_function_prompt))
         tools = None
         if func_declarations:
             tools = [Tool(function_declarations=func_declarations)]
@@ -54,24 +78,33 @@ class GeminiAgent(object):
                 threshold=HarmBlockThreshold.BLOCK_ONLY_HIGH,
             ),
         ]
-        self._model = GenerativeModel(model_name=model_name, tools=tools, system_instruction=system_instruction, safety_settings=safety_config)
+        self._model = GenerativeModel(model_name=model_name,
+                                      tools=tools,
+                                      system_instruction=system_instruction,
+                                      safety_settings=safety_config)
         self.chat = self._model.start_chat()
         self.debug = debug
         self.recreate_client_each_time = recreate_client_each_time
         self._delegation_prompt_set = False
+        self.history_depth = history_depth
         self.on_message = on_message
         self.delegation_function_prompt = delegation_function_prompt
         if delegation_function_prompt is not None:
-            delegation_function_prompt = f"""Use this funciton to delegate task to the agent (your coworker). 
+            delegation_function_prompt = f"""
+            Use this function to delegate task to the agent (your coworker). 
             For delegate pass natural language command to the agent via this method.
             Here is what this agent can be delegate to do: {delegation_function_prompt}
 
-            Keep in mind that the agent does not have full context of the converstaion you have to construct the command in a way that agent can understand and execute the task.
-            The agent will treat the message you send as if it comes from user and will respond to it as if it is a user message. In this case you are the user, and you need to ask it to do something, be clear and concise."""
+            Keep in mind that the agent does not have full context of the conversation,
+             you have to construct the command in a way that agent can understand
+             and execute the task.
+            The agent will treat the message you send as if it comes from user
+             and will respond to it as if it is a user message. In this case you are the user,
+             and you need to ask it to do something, be clear and concise."""
             self.delegation_function_prompt = delegation_function_prompt
         if history_depth > 0 and recreate_client_each_time:
             raise ValueError("history_depth can only be used with recreate_client_each_time=False")
-        
+
     def _call_function(self, function_call):
         if self.debug:
             print("call function initiated")
@@ -86,26 +119,28 @@ class GeminiAgent(object):
                 return func(**args)
             except TypeError as e:
                 stack_trace = traceback.format_exc()
-                logging.error(f"Invalid arguments for function {function_call.name}: {e}\n{stack_trace}")
+                logging.error(
+                    f"Invalid arguments for function {function_call.name}: {e}\n{stack_trace}")
                 return {"error": f"Invalid arguments for function {function_call.name}: {e}\n{stack_trace}"}
             except ValueError as e:
                 stack_trace = traceback.format_exc()
                 logging.error(f"Value error during function call  {function_call.name}: {e}\n{stack_trace}")
                 return {"error": f"Value error during function call {function_call.name}: {e}\n{stack_trace}"}
+            # pylint: disable-next=broad-exception-caught
             except Exception as e:
                 stack_trace = traceback.format_exc()
                 logging.error(f"Unexpected error during function call {function_call.name}: {e}\n{stack_trace}")
                 return {"error": f"Unexpected error during function call {function_call.name}: {e}\n{stack_trace}"}
         else:
             return {"error": "Function not found"}
-        
+
     def _maybe_trim_history(self):
         if self.history_depth > 0:
             trimmed_history = []
             user_messages_count = 0
-            
+
             # Iterate through the history in reverse
-            for h in reversed(self.chat._history):
+            for h in reversed(self.chat.history):
                 if h.role == "user":
                     trimmed_history.append(h)
                     user_messages_count += 1
@@ -113,21 +148,22 @@ class GeminiAgent(object):
                         break
                 else:
                     trimmed_history.append(h)
-                    
+
             # Reverse the trimmed history to restore the original order
-            self.chat._history = list(reversed(trimmed_history))
-        
+            self.chat.history = list(reversed(trimmed_history))
+
     def _maybe_recreate_client(self):
         if self.recreate_client_each_time:
             self.chat = self._model.start_chat()
 
     def send_message(self, msg: str) -> str:
+        """Initiate communication with LLM to execute user's instructions"""
         if self.debug:
             print(f"about to send msg: {msg}")
         response = self.chat.send_message(msg)
         if self.debug:
             print(f"msg: '{msg}' is out")
-        
+
         # Process any function calls until there are no more function calls in the response
         while response.candidates[0].function_calls:
             if self.debug:
@@ -136,7 +172,7 @@ class GeminiAgent(object):
             api_response = self._call_function(function_call)
             if self.debug:
                 print(f"api response: {api_response}")
-            
+
             # Return the API response to Gemini
             response = self.chat.send_message(
                 Part.from_function_response(
@@ -153,7 +189,7 @@ class GeminiAgent(object):
         # Extract the text from the final model response
         return response.text
 
-    
+# pylint: disable-next=too-many-locals
 def _generate_function_declaration(func, *, user_set_name=None, user_set_description=None):
     func_name = user_set_name or func.__name__
     func_doc = user_set_description or (func.__doc__ or "")
@@ -195,21 +231,25 @@ def _generate_function_declaration(func, *, user_set_name=None, user_set_descrip
     return function_declaration
 
 
+# pylint: disable-next=too-many-arguments
 def create_agent_from_functions_list(
-        *, 
-        model_name=config.default_model,
-        functions=[],
-        system_instruction=None, 
-        debug=False, 
-        recreate_client_each_time=False, 
+        *,
+        model_name=DEFAULT_MODEL,
+        functions=None,
+        system_instruction=None,
+        debug=False,
+        recreate_client_each_time=False,
         history_depth=-1,
-        add_scheduling_functions=False, 
-        gcs_bucket=None, 
+        add_scheduling_functions=False,
+        gcs_bucket=None,
         gcs_blob=None,
-        delegation_function_prompt=None, 
+        delegation_function_prompt=None,
         delegates=None,
         on_message=None
-    ):
+):
+    """Create an agent with custom functions and other parameters received from user"""
+    if functions is None:
+        functions = []
     if (not gcs_bucket and gcs_blob) or (gcs_bucket and not gcs_blob):
         raise ValueError("Both gcs_bucket and gcs_blob must be provided")
     if add_scheduling_functions:
@@ -228,11 +268,11 @@ def create_agent_from_functions_list(
         delegation_function_prompt=delegation_function_prompt,
         delegates=delegates,
         on_message=on_message,
-        functions=functions, 
-        model_name=model_name, 
-        system_instruction=system_instruction, 
-        debug=debug, 
-        recreate_client_each_time=recreate_client_each_time, 
+        functions=functions,
+        model_name=model_name,
+        system_instruction=system_instruction,
+        debug=debug,
+        recreate_client_each_time=recreate_client_each_time,
         history_depth=history_depth)
     if add_scheduling_functions:
         scheduler_instance.set_gemini_agent(agent)

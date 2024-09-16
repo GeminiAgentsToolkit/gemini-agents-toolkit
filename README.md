@@ -75,7 +75,7 @@ This project uses Gemini via Google Cloud API. To use the project you must first
 
 ### Allow requesting LLM models via APIs
 1. The project uses [Vertex AI API](https://cloud.google.com/vertex-ai/) to request Gemini models, Vertex AI API should be allowed in your Google cloud account. You need to allow it from the [Google Cloud Vertex AI API product page](https://console.cloud.google.com/apis/library/aiplatform.googleapis.com).
-2. [Optional] With this [instructions](https://cloud.google.com/apis/docs/capping-api-usage) you can limit or increase your API requests quota.
+2. [Optional] With these [instructions](https://cloud.google.com/apis/docs/capping-api-usage) you can limit or increase your API requests quota.
 
 ### Set up gcloud tool in your environment
 Follow the Google instructions to [install](https://cloud.google.com/sdk/docs/install) gcloud and to [initialize](https://cloud.google.com/sdk/docs/initializing) it.
@@ -125,10 +125,9 @@ In this example, you have created a custom function and gave Gemini ability to u
 <summary>See code</summary>
 
 ```python
-import config.config as config
-from gemini_agents_toolkit import agent
-
 import vertexai
+from config import (PROJECT_ID, REGION, SIMPLE_MODEL)
+from gemini_agents_toolkit import agent
 
 
 def say_to_duck(say: str):
@@ -136,10 +135,11 @@ def say_to_duck(say: str):
     return f"duck answer is: duck duck {say} duck duck duck"
 
 
-vertexai.init(project=config.project_id, location=config.region)
+vertexai.init(project=PROJECT_ID, location=REGION)
 
 all_functions = [say_to_duck]
-duck_comms_agent = agent.create_agent_from_functions_list(functions=all_functions, model_name=config.simple_model)
+duck_comms_agent = agent.create_agent_from_functions_list(functions=all_functions,
+                                                          model_name=SIMPLE_MODEL)
 
 print(duck_comms_agent.send_message("say to the duck message: I am hungry"))
 ```
@@ -156,40 +156,47 @@ python examples/multi_agent_example.py
 <summary>See code</summary>
 
 ```python
-import config.config as config
+import datetime
+import vertexai
+from config import (PROJECT_ID, REGION, SIMPLE_MODEL)
 from gemini_agents_toolkit import agent
 
-import vertexai
-
-
-vertexai.init(project=config.project_id, location=config.region)
+vertexai.init(project=PROJECT_ID, location=REGION)
 
 
 def generate_duck_comms_agent():
+    """create an agent to say to a duck"""
+
     def say_to_duck(say: str):
         """say something to a duck"""
         return f"duck answer is: duck duck {say} duck duck duck"
+
     return agent.create_agent_from_functions_list(
-        functions=[say_to_duck], 
-        delegation_function_prompt="Agent can communicat to ducks and can say something to them. And provides the answer from the duck.", 
-        model_name=config.simple_model)
+        functions=[say_to_duck],
+        delegation_function_prompt=("""Agent can communicat to ducks and can say something to them.
+                                    And provides the answer from the duck."""),
+        model_name=SIMPLE_MODEL)
 
 
 def generate_time_checker_agent():
+    """create an agent to get the time"""
+
     def get_local_time():
         """get the current local time"""
-        import datetime
         return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     return agent.create_agent_from_functions_list(
-        functions=[get_local_time], 
-        delegation_function_prompt="Agent can provide the current local time.", 
-        model_name=config.simple_model)
+        functions=[get_local_time],
+        delegation_function_prompt="Agent can provide the current local time.",
+        model_name=SIMPLE_MODEL)
 
 
 duck_comms_agent = generate_duck_comms_agent()
 time_checker_agent = generate_time_checker_agent()
 
-main_agent = agent.create_agent_from_functions_list(delegates=[time_checker_agent, duck_comms_agent], model_name=config.simple_model)
+main_agent = agent.create_agent_from_functions_list(
+    delegates=[time_checker_agent, duck_comms_agent],
+    model_name=SIMPLE_MODEL)
 
 print(main_agent.send_message("say to the duck message: I am hungry"))
 print(main_agent.send_message("can you tell me what time it is?"))
@@ -208,11 +215,10 @@ python examples/simple_scheduler_example.py
 <summary>See code</summary>
 
 ```python
-import config.config as config
-from gemini_agents_toolkit import agent
 import time
-
 import vertexai
+from config import (PROJECT_ID, REGION, SIMPLE_MODEL)
+from gemini_agents_toolkit import agent
 
 
 def say_to_duck(say: str):
@@ -221,13 +227,17 @@ def say_to_duck(say: str):
 
 
 def print_msg_from_agent(msg: str):
+    """print message in console"""
     print(msg)
 
 
-vertexai.init(project=config.project_id, location=config.region)
+vertexai.init(project=PROJECT_ID, location=REGION)
 
 all_functions = [say_to_duck]
-duck_comms_agent = agent.create_agent_from_functions_list(functions=all_functions, model_name=config.simple_model, add_scheduling_functions=True, on_message=print_msg_from_agent)
+duck_comms_agent = agent.create_agent_from_functions_list(functions=all_functions,
+                                                          model_name=SIMPLE_MODEL,
+                                                          add_scheduling_functions=True,
+                                                          on_message=print_msg_from_agent)
 
 # no need to print result directly since we passed to agent on_message
 duck_comms_agent.send_message("can you be saying, each minute, to the duck that I am hungry")
@@ -247,11 +257,10 @@ python examples/pipeline_example.py
 <summary>See code</summary>
 
 ```python
-import config.config as config
+import vertexai
+from config import (PROJECT_ID, REGION, DEFAULT_MODEL, SIMPLE_MODEL)
 from gemini_agents_toolkit import agent
 from gemini_agents_toolkit.pipeline.basic_step import BasicStep
-
-import vertexai
 
 
 def say_to_duck(say: str):
@@ -259,16 +268,35 @@ def say_to_duck(say: str):
     return f"duck answer is: duck duck {say} duck duck duck"
 
 
-vertexai.init(project=config.project_id, location=config.region)
+vertexai.init(project=PROJECT_ID, location=REGION)
 
 all_functions = [say_to_duck]
-duck_comms_agent = agent.create_agent_from_functions_list(functions=all_functions, model_name=config.simple_model)
-computation_agent = agent.create_agent_from_functions_list(model_name=config.default_model, system_instruction="you are agent design to do computation")
-printing_agent = agent.create_agent_from_functions_list(model_name=config.default_model, system_instruction="you are agent design to do nice prints in the shell. You do not have to be producing BASH commands your output will be printed by other developer in the bush you are ONLY in charge of the formattin ASCII characters that will be printed. No need to even use characters like ``` before/after you response")
+duck_comms_agent = agent.create_agent_from_functions_list(functions=all_functions,
+                                                          model_name=SIMPLE_MODEL)
+computation_agent = agent.create_agent_from_functions_list(
+    model_name=DEFAULT_MODEL,
+    system_instruction="you are agent design to do computation"
+)
 
-pipeline = (BasicStep(duck_comms_agent, "say to duck: I am hungry") | 
-            BasicStep(computation_agent, "calculate how many times word duck was used in the response") | 
-            BasicStep(printing_agent, "print number in a nice format, go nuts with how you want it to look"))
+PRINTING_AGENT_PROMPT = """
+You are agent design to do nice prints in the shell.
+You do not have to be producing BASH commands,
+your output will be printed by other developer in the bash.
+You are ONLY in charge of the formatting ASCII characters  that will be printed.
+No need to even use characters like ``` before/after you response.
+"""
+printing_agent = agent.create_agent_from_functions_list(model_name=DEFAULT_MODEL,
+                                                        system_instruction=PRINTING_AGENT_PROMPT)
+
+pipeline = (BasicStep(duck_comms_agent, "say to duck: I am hungry") |
+            BasicStep(
+                computation_agent,
+                "calculate how many times word duck was used in the response"
+            ) |
+            BasicStep(
+                printing_agent,
+                "print number in a nice format, go nuts with how you want it to look"
+            ))
 print(pipeline.execute())
 ```
 </details>
