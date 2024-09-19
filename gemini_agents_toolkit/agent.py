@@ -183,6 +183,7 @@ class GeminiAgent:
                 ),
             )
 
+        self._maybe_trim_history()
         self._maybe_recreate_client()
         if self.on_message is not None:
             self.on_message(response.text)
