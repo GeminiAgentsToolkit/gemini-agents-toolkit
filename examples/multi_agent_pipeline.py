@@ -53,6 +53,15 @@ def write_file(path: str, content: str):
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
         return "DONE"
+    
+
+def notify_user(msg: str):
+    """notify user when needed about something, only use this when user explicitly wants to be notified
+    
+    Args:
+        msg (str): message to notify
+    """
+    print("NOTIFICATION: " + msg)
 
 
 all_functions = [read_file, write_file, pwd, ls]
