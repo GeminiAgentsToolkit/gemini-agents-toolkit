@@ -2,7 +2,7 @@
 
 import random
 import vertexai
-from config import (PROJECT_ID, REGION, DEFAULT_MODEL)
+from config import (PROJECT_ID, REGION, DEFAULT_MODEL, SIMPLE_MODEL)
 from gemini_agents_toolkit import agent
 from gemini_agents_toolkit.pipeline.eager_pipeline import EagerPipeline
 
@@ -96,8 +96,8 @@ all_functions = [
 investor_agent = agent.create_agent_from_functions_list(functions=all_functions,
                                                         model_name=DEFAULT_MODEL)
 
-pipeline = EagerPipeline(default_agent=investor_agent)
-if not pipeline.boolean_step("check if I own more than 30 shares of TQQQ"):
+pipeline = EagerPipeline(default_agent=investor_agent, use_convert_to_bool_agent=True)
+if not pipeline.boolean_step("do I own more than 30 shares of TQQQ"):
     if not pipeline.boolean_step("is there a limit sell for TQQQ exists already?"):
         pipeline.step("check current price of TQQQ")
         pipeline.step("set limit sell order for TQQQ for price +4% of current price")

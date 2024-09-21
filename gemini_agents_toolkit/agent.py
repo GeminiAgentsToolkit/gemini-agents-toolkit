@@ -10,7 +10,10 @@ from vertexai.generative_models import (
     Tool,
     HarmCategory,
     HarmBlockThreshold,
-    SafetySetting
+    SafetySetting,
+    GenerationConfig,
+    Part,
+    GenerativeModel
 )
 from config import (DEFAULT_MODEL)
 from gemini_agents_toolkit import scheduler
@@ -156,7 +159,7 @@ class GeminiAgent:
         if self.recreate_client_each_time:
             self.chat = self._model.start_chat()
 
-    def send_message(self, msg: str) -> str:
+    def send_message(self, msg: str, *, generation_config: GenerationConfig = None) -> str:
         """Initiate communication with LLM to execute user's instructions"""
         if self.debug:
             print(f"about to send msg: {msg}")
@@ -181,6 +184,7 @@ class GeminiAgent:
                         "content": api_response,
                     },
                 ),
+                generation_config=generation_config
             )
 
         self._maybe_trim_history()
