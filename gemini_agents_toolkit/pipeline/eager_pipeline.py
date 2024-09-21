@@ -57,7 +57,7 @@ class EagerPipeline(object):
         Prompt: {prompt}
         data from prev steps: {self.prev_step_data}.
         
-        IMPORTANT: remember you ONLY can return True/False"""
+        IMPORTANT: remember you ONLY can return True/False, no print(False) or print(True) or any other print statement"""
         agent_to_use = self._get_agent(agent)
         response_schema = {"type": "STRING", "enum": ["True", "False"]}
         generation_config = GenerationConfig(

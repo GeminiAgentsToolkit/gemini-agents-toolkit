@@ -10,5 +10,7 @@ individus:
     traitement_indiciaire_brut: 2000
   enfant1:
     date_naissance: 2000-01-01
+    age: -2
   enfant2:
     date_naissance: 2009-01-01
+    age: 1
