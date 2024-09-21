@@ -10,6 +10,7 @@ class EagerPipeline(object):
         self.logger = logger
         if use_convert_to_bool_agent:
             self.convert_to_bool_agent = agent.create_agent_from_functions_list(model_name=SIMPLE_MODEL, recreate_client_each_time=True)
+        self.last_step_context = None
 
     def _get_agent(self, agent):
         if agent:
@@ -45,7 +46,7 @@ class EagerPipeline(object):
         user prompt: {prompt}
         data from prev steps: {self.prev_step_data}"""
         agent_to_use = self._get_agent(agent)
-        self.prev_step_data = agent_to_use.send_message(prompt)
+        self.prev_step_data, self.last_step_context = agent_to_use.send_message(prompt, context=self.last_step_context)
         return self.prev_step_data
     
     def boolean_step(self, prompt, *, agent=None):
@@ -67,7 +68,7 @@ class EagerPipeline(object):
         )
         bool_answer = agent_to_use.send_message(prompt)
         if self.convert_to_bool_agent:
-            bool_answer = self.convert_to_bool_agent.send_message(f"please convert to best fitting response True/False here is answer:{bool_answer}, \n question was: {prompt}")
+            bool_answer = self.convert_to_bool_agent.send_message(f"please convert to best fitting response True/False here is answer:{bool_answer}, \n question was: {prompt}", generation_config=generation_config)
         if "true" in bool_answer.lower():
             if self.logger:
                 self.logger.info(f"boolean_step: True")
@@ -87,5 +88,6 @@ class EagerPipeline(object):
         any messages even if they were comming from the user before, now is the time to build proper summary for a user.
         Prev data from prev step: {self.prev_step_data}."""
         agent_to_use = self._get_agent(agent)
-        return agent_to_use.send_message(prompt)
+        answer, self.last_step_context = agent_to_use.send_message(prompt)
+        return answer
     
