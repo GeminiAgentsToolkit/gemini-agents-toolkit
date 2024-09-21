@@ -51,6 +51,15 @@ def write_file(path: str, content: str):
     with open(path, "w") as f:
         f.write(content)
         return "DONE"
+    
+
+def notify_user(msg: str):
+    """notify user when needed about something, only use this when user explicitly wants to be notified
+    
+    Args:
+        msg (str): message to notify
+    """
+    print("NOTIFICATION: " + msg)
 
 
 all_functions = [read_file, write_file, pwd, ls]
@@ -65,5 +74,6 @@ json_agent = create_json_agent(model_name="gemini-1.5-pro")
 pipeline = EagerPipeline(default_agent=fs_agent)
 pipeline.step("read the content of the file examples/test.yaml")
 pipeline.step("convert yaml to json", agent=json_agent)
-pipeline.step("save json to file examples/test_out.json")
+pipeline.step("remove parent with \"depcom_entreprise\": \"69381\" and generated updated json", agent=json_agent)
+pipeline.step("write json to file examples/test_out.json")
 print(pipeline.summary())

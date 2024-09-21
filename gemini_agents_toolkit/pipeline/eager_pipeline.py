@@ -4,7 +4,6 @@ class EagerPipeline(object):
         self.prev_step_data = None
         self.logger = logger
 
-
     def _get_agent(self, agent):
         if agent:
             return agent
@@ -51,7 +50,7 @@ class EagerPipeline(object):
         Prompt: {prompt}
         data from prev steps: {self.prev_step_data}.
         
-        IMPORTANT: remember you ONLY can return True/False"""
+        IMPORTANT: remember you ONLY can return True/False, no print(False) or print(True) or any other print statement"""
         agent_to_use = self._get_agent(agent)
         bool_answer = agent_to_use.send_message(prompt)
         if "true" in bool_answer.lower():
