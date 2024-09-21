@@ -102,7 +102,6 @@ if not pipeline.boolean_step("do I own more than 30 shares of TQQQ"):
         pipeline.step("check current price of TQQQ")
         pipeline.step("set limit sell order for TQQQ for price +4% of current price")
     else:
-        print("everywhere")
         if pipeline.boolean_step("is there a limit buy exists already?"):
             if not pipeline.boolean_step(
                     "is there current limit buy price lower than current price of TQQQ -5%?"):

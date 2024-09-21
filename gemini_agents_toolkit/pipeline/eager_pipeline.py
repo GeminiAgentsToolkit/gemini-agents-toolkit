@@ -67,7 +67,8 @@ class EagerPipeline(object):
         )
         bool_answer = agent_to_use.send_message(prompt)
         if self.convert_to_bool_agent:
-            bool_answer = self.convert_to_bool_agent.send_message(f"please convert to best fitting response True/False here is answer:{bool_answer}, \n question was: {prompt}")
+            bool_answer = self.convert_to_bool_agent.send_message(f"please convert to best fitting response True/False here is answer:{bool_answer}, \n question was: {prompt}",
+                                                                generation_config=generation_config)
         if "true" in bool_answer.lower():
             if self.logger:
                 self.logger.info(f"boolean_step: True")
