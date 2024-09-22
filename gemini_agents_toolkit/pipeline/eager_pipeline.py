@@ -56,16 +56,19 @@ class EagerPipeline(object):
     def boolean_step(self, prompt, *, agent=None):
         if self.logger:
             self.logger.info(f"boolean_step: {prompt}")
+
+        #TODO think to rename puser prompt to simple user question. 
         prompt = f"""this is one step in the pipeline, this steps are user command but not comming direclty from the user:
-        Following prompt provided by user, and user expects this to compute in a boolean yes/no answer, you have to retunr
-        True/False and nothing else in your response. 
-        Prompt: {prompt}
+        Following prompt provided by user, and user expects this to compute in a boolean yes/no answer, you have to return
+        True/False and nothing else in your response.
+        User's question is: {prompt}
         data from prev steps: {self.prev_step_data}.
         
         IMPORTANT: remember you ONLY can return True/False, no print(False) or print(True) or any other print statement"""
         agent_to_use = self._get_agent(agent)
        
         bool_answer = agent_to_use.send_message(prompt)
+        
         if self.convert_to_bool_agent:
             bool_answer = self.convert_to_bool_agent.send_message(f"please convert to best fitting response True/False here is answer:{bool_answer}, \n question was: {prompt}")
         if "true" in bool_answer.lower():
@@ -77,6 +80,8 @@ class EagerPipeline(object):
                 self.logger.info(f"boolean_step: False")
             return False
         else:
+            if self.logger:
+                self.logger.debug(f"prompt:{prompt}\nanswer:{bool_answer}")
             raise ValueError("Invalid response from user, expected True/False only")
         
     def summary(self, *, agent=None):
