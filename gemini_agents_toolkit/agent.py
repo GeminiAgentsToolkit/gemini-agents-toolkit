@@ -10,10 +10,14 @@ from vertexai.generative_models import (
     Tool,
     HarmCategory,
     HarmBlockThreshold,
-    SafetySetting
+    SafetySetting,
+    GenerationConfig,
+    Part,
+    GenerativeModel
 )
 from config import (DEFAULT_MODEL)
 from gemini_agents_toolkit import scheduler
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 
 # pylint: disable-next=too-many-instance-attributes
@@ -150,13 +154,14 @@ class GeminiAgent:
                     trimmed_history.append(h)
 
             # Reverse the trimmed history to restore the original order
-            self.chat.history = list(reversed(trimmed_history))
+            self.chat._history = list(reversed(trimmed_history))
 
     def _maybe_recreate_client(self):
         if self.recreate_client_each_time:
             self.chat = self._model.start_chat()
 
-    def send_message(self, msg: str) -> str:
+    @retry(stop=stop_after_attempt(2), wait=wait_fixed(2))
+    def send_message(self, msg: str, *, generation_config: GenerationConfig = None) -> str:
         """Initiate communication with LLM to execute user's instructions"""
         if self.debug:
             print(f"about to send msg: {msg}")
@@ -181,6 +186,7 @@ class GeminiAgent:
                         "content": api_response,
                     },
                 ),
+                generation_config=generation_config
             )
 
         self._maybe_trim_history()
