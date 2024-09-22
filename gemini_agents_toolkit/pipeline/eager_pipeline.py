@@ -9,7 +9,13 @@ class EagerPipeline(object):
         self.prev_step_data = None
         self.logger = logger
         if use_convert_to_bool_agent:
-            self.convert_to_bool_agent = agent.create_agent_from_functions_list(model_name=SIMPLE_MODEL, recreate_client_each_time=True)
+            response_schema = {"type": "STRING", "enum": ["True", "False"]}
+            generation_config = GenerationConfig(
+                response_schema=response_schema,
+                response_mime_type="application/json",
+                temperature=0
+            )
+            self.convert_to_bool_agent = agent.create_agent_from_functions_list(model_name=SIMPLE_MODEL, recreate_client_each_time=True, generation_config=generation_config)
 
     def _get_agent(self, agent):
         if agent:
@@ -17,7 +23,6 @@ class EagerPipeline(object):
         if self.agent:
             return self.agent
         raise ValueError("either default agent or local(per ste) agent should be set")
-
 
     def if_step(self, prompt, then_steps, else_steps, *, agent=None):
         agent_to_use = self._get_agent(agent)
@@ -59,16 +64,10 @@ class EagerPipeline(object):
         
         IMPORTANT: remember you ONLY can return True/False, no print(False) or print(True) or any other print statement"""
         agent_to_use = self._get_agent(agent)
-        response_schema = {"type": "STRING", "enum": ["True", "False"]}
-        generation_config = GenerationConfig(
-            response_schema=response_schema,
-            response_mime_type="application/json",
-            temperature=0
-        )
+       
         bool_answer = agent_to_use.send_message(prompt)
         if self.convert_to_bool_agent:
-            bool_answer = self.convert_to_bool_agent.send_message(f"please convert to best fitting response True/False here is answer:{bool_answer}, \n question was: {prompt}",
-                                                                generation_config=generation_config)
+            bool_answer = self.convert_to_bool_agent.send_message(f"please convert to best fitting response True/False here is answer:{bool_answer}, \n question was: {prompt}")
         if "true" in bool_answer.lower():
             if self.logger:
                 self.logger.info(f"boolean_step: True")

@@ -20,6 +20,12 @@ from gemini_agents_toolkit import scheduler
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 
+def log_retry_error(retry_state):
+    """Logs the retry attempt details including the error message."""
+    print(f"Retrying {retry_state.fn.__name__}... Attempt #{retry_state.attempt_number}, "
+        f"Last error: {retry_state.outcome.exception()}")
+
+
 # pylint: disable-next=too-many-instance-attributes
 class GeminiAgent:
     """An agent to request LLM for executing users instructions with tools (custom functions) provided by user"""
@@ -36,7 +42,8 @@ class GeminiAgent:
             debug=False,
             recreate_client_each_time=False,
             history_depth=-1,
-            on_message=None
+            on_message=None,
+            generation_config: GenerationConfig = None
     ):
         if not functions:
             functions = []
@@ -85,7 +92,8 @@ class GeminiAgent:
         self._model = GenerativeModel(model_name=model_name,
                                       tools=tools,
                                       system_instruction=system_instruction,
-                                      safety_settings=safety_config)
+                                      safety_settings=safety_config,
+                                      generation_config=generation_config)
         self.chat = self._model.start_chat()
         self.debug = debug
         self.recreate_client_each_time = recreate_client_each_time
@@ -160,7 +168,7 @@ class GeminiAgent:
         if self.recreate_client_each_time:
             self.chat = self._model.start_chat()
 
-    @retry(stop=stop_after_attempt(2), wait=wait_fixed(2))
+    @retry(stop=stop_after_attempt(2), wait=wait_fixed(2), after=log_retry_error)
     def send_message(self, msg: str, *, generation_config: GenerationConfig = None) -> str:
         """Initiate communication with LLM to execute user's instructions"""
         if self.debug:
@@ -194,7 +202,12 @@ class GeminiAgent:
         if self.on_message is not None:
             self.on_message(response.text)
         # Extract the text from the final model response
-        return response.text
+        respnose_text = "DONE"
+        try:
+            respnose_text = response.candidates[0].text
+        except Exception as e:
+            print(f"Error: {str(e)}")
+        return respnose_text
 
 # pylint: disable-next=too-many-locals
 def _generate_function_declaration(func, *, user_set_name=None, user_set_description=None):
@@ -252,7 +265,8 @@ def create_agent_from_functions_list(
         gcs_blob=None,
         delegation_function_prompt=None,
         delegates=None,
-        on_message=None
+        on_message=None,
+        generation_config=None
 ):
     """Create an agent with custom functions and other parameters received from user"""
     if functions is None:
@@ -280,7 +294,8 @@ def create_agent_from_functions_list(
         system_instruction=system_instruction,
         debug=debug,
         recreate_client_each_time=recreate_client_each_time,
-        history_depth=history_depth)
+        history_depth=history_depth,
+        generation_config=generation_config)
     if add_scheduling_functions:
         scheduler_instance.set_gemini_agent(agent)
         scheduler_instance.start_scheduler()
