@@ -5,6 +5,7 @@ import vertexai
 from config import (PROJECT_ID, REGION, DEFAULT_MODEL, SIMPLE_MODEL)
 from gemini_agents_toolkit import agent
 from gemini_agents_toolkit.pipeline.eager_pipeline import EagerPipeline
+from gemini_agents_toolkit.history_utils import summarize
 
 # pylint: disable-next=invalid-name
 current_limit_buy_price = None
@@ -94,24 +95,44 @@ all_functions = [
     check_how_many_shares_i_own
 ]
 investor_agent = agent.create_agent_from_functions_list(functions=all_functions,
-                                                        model_name=DEFAULT_MODEL)
+                                                        model_name=DEFAULT_MODEL,
+                                                        system_instruction="""You are an investor agent that can run set of actions.
+                                                        when you are executing the actions, do not try to call multipele meathod at once.
+                                                        You can only call one method at a time. But you can call a mathod, got a response and call another mathod.
+                                                        You can NOT execute arbitary pythong code, you ONLY can call maethods/tools avialbe to you.""")
 
 pipeline = EagerPipeline(default_agent=investor_agent, use_convert_to_bool_agent=True)
-if not pipeline.boolean_step("do I own more than 30 shares of TQQQ"):
-    if not pipeline.boolean_step("is there a limit sell for TQQQ exists already?"):
-        pipeline.step("check current price of TQQQ")
-        pipeline.step("set limit sell order for TQQQ for price +4% of current price")
+main_events_history = []
+full_history = []
+own_30_shares, _ = pipeline.boolean_step("do I own more than 30 shares of TQQQ")
+if not own_30_shares:
+    is_there_a_limit_sell_order, bool_result_history = pipeline.boolean_step("is there a limit sell order exists already?")
+    full_history.extend(bool_result_history)
+    _, history = pipeline.step("check current price of TQQQ")
+    full_history.extend(history)
+    main_events_history.extend(history)
+    if not is_there_a_limit_sell_order:
+        _, history = pipeline.step("set limit sell order for TQQQ for price +4% of current price", history=main_events_history)
+        full_history.extend(history)
     else:
-        if pipeline.boolean_step("is there a limit buy exists already?"):
+        is_there_a_limit_buy_order, history = pipeline.boolean_step("is there a limit buy order exists already?")
+        full_history.extend(history)
+        if is_there_a_limit_buy_order:
             if not pipeline.boolean_step(
                     "is there current limit buy price lower than current price of TQQQ -5%?"):
-                pipeline.step("cancel limit buy order")
-                pipeline.step(
+                _, history = pipeline.step("cancel limit buy order for TQQQ")
+                full_history.extend(history)
+                main_events_history.extend(history)
+                _, history = pipeline.step(
                     """set limit buy order for TQQQ for price 3 percent below the current price. 
                     Do not return compute formula,
-                    do compute of the price yourself in your head""")
+                    do compute of the price yourself in your head""", history=main_events_history)
+                full_history.extend(history)
+                main_events_history.extend(history)
         else:
-            pipeline.step(
+            _, history = pipeline.step(
                 """set limit buy order for TQQQ for price 3 percent below the current price. 
                 Do not return compute formula, do compute of the price yourself in your head""")
-print(pipeline.summary())
+            full_history.extend(history)
+answer, _ = summarize(agent=investor_agent, history=full_history)
+print(answer)

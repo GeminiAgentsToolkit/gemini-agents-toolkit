@@ -6,7 +6,6 @@ from config import (SIMPLE_MODEL)
 class EagerPipeline(object):
     def __init__(self, *, default_agent=None, logger=None, use_convert_to_bool_agent=False):
         self.agent = default_agent
-        self.prev_step_data = None
         self.logger = logger
         if use_convert_to_bool_agent:
             response_schema = {"type": "STRING", "enum": ["True", "False"]}
@@ -15,7 +14,7 @@ class EagerPipeline(object):
                 response_mime_type="application/json",
                 temperature=0
             )
-            self.convert_to_bool_agent = agent.create_agent_from_functions_list(model_name=SIMPLE_MODEL, recreate_client_each_time=True, generation_config=generation_config)
+            self.convert_to_bool_agent = agent.create_agent_from_functions_list(model_name=SIMPLE_MODEL, generation_config=generation_config)
 
     def _get_agent(self, agent):
         if agent:
@@ -24,68 +23,61 @@ class EagerPipeline(object):
             return self.agent
         raise ValueError("either default agent or local(per ste) agent should be set")
 
-    def if_step(self, prompt, then_steps, else_steps, *, agent=None):
+    def if_step(self, prompt, then_steps, else_steps, *, agent=None, history=None):
         agent_to_use = self._get_agent(agent)
         if self.logger:
             self.logger.info(f"if_step: {prompt}, then_steps: {then_steps}, else_steps: {else_steps}") 
-        if self.boolean_step(prompt, agent=agent_to_use):
+        bool_result, updated_history = self.boolean_step(prompt, agent=agent_to_use, history=history)
+        if bool_result:
             if then_steps:
-                self.steps(then_steps, agent=agent_to_use)
+                return self.steps(then_steps, agent=agent_to_use, history=updated_history)
         else:
             if else_steps:
-                self.steps(else_steps, agent=agent_to_use)
+                return self.steps(else_steps, agent=agent_to_use, history=updated_history)
 
-    def steps(self, steps, *, agent=None):
+    def steps(self, steps, *, agent=None, history=None):
         agent_to_use = self._get_agent(agent)
+        if history:
+            agent_to_use.set_history(history)
+        final_result = None
+        final_history = history
         if isinstance(steps, list):
             for step in steps:
-                self.step(step, agent=agent_to_use)
+                final_result, final_history = self.step(step, agent=agent_to_use, history=final_history)
         else:
-            self.step(steps, agent=agent_to_use)
+            final_result, final_history = self.step(steps, agent=agent_to_use, history=final_history)
+        return final_result, final_history
 
-    def step(self, prompt, *, agent=None):
+    def step(self, prompt, *, agent=None, history=None):
         if self.logger:
             self.logger.info(f"step: {prompt}")
         prompt = f"""this is one step in the pipeline, this steps are user command but not comming direclty from the user:
-        user prompt: {prompt}
-        data from prev steps: {self.prev_step_data}"""
+        user prompt: {prompt}"""
         agent_to_use = self._get_agent(agent)
-        self.prev_step_data = agent_to_use.send_message(prompt)
-        return self.prev_step_data
+        return agent_to_use.send_message(prompt, history=history)
     
-    def boolean_step(self, prompt, *, agent=None):
+    def boolean_step(self, prompt, *, agent=None, history=None):
         if self.logger:
             self.logger.info(f"boolean_step: {prompt}")
         prompt = f"""this is one step in the pipeline, this steps are user command but not comming direclty from the user:
         Following prompt provided by user, and user expects this to compute in a boolean yes/no answer, you have to retunr
         True/False and nothing else in your response. 
         Prompt: {prompt}
-        data from prev steps: {self.prev_step_data}.
         
         IMPORTANT: remember you ONLY can return True/False, no print(False) or print(True) or any other print statement"""
         agent_to_use = self._get_agent(agent)
        
-        bool_answer = agent_to_use.send_message(prompt)
+        bool_answer, history = agent_to_use.send_message(prompt, history=history)
         if self.convert_to_bool_agent:
-            bool_answer = self.convert_to_bool_agent.send_message(f"please convert to best fitting response True/False here is answer:{bool_answer}, \n question was: {prompt}")
+            bool_answer, _ = self.convert_to_bool_agent.send_message(f"please convert to best fitting response True/False here is answer:{bool_answer}, \n question was: {prompt}")
         if "true" in bool_answer.lower():
             if self.logger:
                 self.logger.info(f"boolean_step: True")
-            return True
+            return True, history
         elif "false" in bool_answer.lower():
             if self.logger:
                 self.logger.info(f"boolean_step: False")
-            return False
+            return False, history
         else:
             raise ValueError("Invalid response from user, expected True/False only")
-        
-    def summary(self, *, agent=None):
-        if self.logger:
-            self.logger.info(f"summary")
-        prompt = f"""Now if the final step of the pipeline/dialog, provide summary of main things that were done and why.
-        do not omit any steps, and only print key details. This dialog was a pipline so do not assume user knows about
-        any messages even if they were comming from the user before, now is the time to build proper summary for a user.
-        Prev data from prev step: {self.prev_step_data}."""
-        agent_to_use = self._get_agent(agent)
-        return agent_to_use.send_message(prompt)
     
