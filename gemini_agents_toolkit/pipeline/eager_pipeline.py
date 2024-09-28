@@ -1,4 +1,5 @@
 from vertexai.generative_models import GenerationConfig
+from gemini_agents_toolkit.history_utils import summarize
 from gemini_agents_toolkit import agent
 from config import (SIMPLE_MODEL)
 
@@ -7,6 +8,7 @@ class EagerPipeline(object):
     def __init__(self, *, default_agent=None, logger=None, use_convert_to_bool_agent=False):
         self.agent = default_agent
         self.logger = logger
+        self._full_history = []
         if use_convert_to_bool_agent:
             response_schema = {"type": "STRING", "enum": ["True", "False"]}
             generation_config = GenerationConfig(
@@ -54,11 +56,15 @@ class EagerPipeline(object):
         prompt = f"""this is one step in the pipeline, this steps are user command but not comming direclty from the user:
         user prompt: {prompt}"""
         agent_to_use = self._get_agent(agent)
-        return agent_to_use.send_message(prompt, history=history)
+        result, updated_history = agent_to_use.send_message(prompt, history=history)
+        self._full_history.extend(updated_history)
+        return result, updated_history
     
     def boolean_step(self, prompt, *, agent=None, history=None):
         if self.logger:
             self.logger.info(f"boolean_step: {prompt}")
+
+        #TODO think to rename puser prompt to simple user question. 
         prompt = f"""this is one step in the pipeline, this steps are user command but not comming direclty from the user:
         Following prompt provided by user, and user expects this to compute in a boolean yes/no answer, you have to retunr
         True/False and nothing else in your response. 
@@ -70,6 +76,7 @@ class EagerPipeline(object):
         bool_answer, history = agent_to_use.send_message(prompt, history=history)
         if self.convert_to_bool_agent:
             bool_answer, _ = self.convert_to_bool_agent.send_message(f"please convert to best fitting response True/False here is answer:{bool_answer}, \n question was: {prompt}")
+        self._full_history.extend(history)
         if "true" in bool_answer.lower():
             if self.logger:
                 self.logger.info(f"boolean_step: True")
@@ -79,5 +86,14 @@ class EagerPipeline(object):
                 self.logger.info(f"boolean_step: False")
             return False, history
         else:
+            if self.logger:
+                self.logger.debug(f"prompt:{prompt}\nanswer:{bool_answer}")
             raise ValueError("Invalid response from user, expected True/False only")
+        
+    def summarize_full_history(self, *, agent=None):
+        agent_to_use = self._get_agent(agent)
+        return summarize(agent=agent_to_use, history=self._full_history)
+    
+    def get_full_history(self):
+        return self._full_history
     
