@@ -286,15 +286,16 @@ def create_agent_from_functions_list(
     if debug:
         print(f"all_functions: {functions}")
     # Hack to fix: https://github.com/googleapis/python-aiplatform/issues/4472
-    system_instruction = system_instruction or ""
-    system_instruction = f"""{system_instruction}\n\n## IMPORTANT
-                        You are anagent that can call a set of actions(functions).
-                        when you are executing the actions(functions), do not try to call multipele methods at once or in one code.
-                        You can only call one method at a time. But you can call a method, get a response and call another method.
-                        You can NOT execute arbitary pythong code either, you ONLY can call methods/tools avialbe to you.
-                        Also you can NOT try to evaluet anything as input argumetn to the funciton,
-                        For example: print(12 > 24) - INCORRECT
-                        print(False) - CORRECT (with the caveate that user provided to you method print that expect boolean as an input)"""
+    if functions and len(functions) > 0:
+        system_instruction = system_instruction or ""
+        system_instruction = f"""{system_instruction}\n\n## IMPORTANT
+                            You are anagent that can call a set of actions(functions).
+                            when you are executing the actions(functions), do not try to call multipele methods at once or in one code.
+                            You can only call one method at a time. But you can call a method, get a response and call another method.
+                            You can NOT execute arbitary pythong code either, you ONLY can call methods/tools avialbe to you.
+                            Also you can NOT try to evaluet anything as input argumetn to the funciton,
+                            For example: print(12 > 24) - INCORRECT
+                            print(False) - CORRECT (with the caveate that user provided to you method print that expect boolean as an input)"""
     agent = GeminiAgent(
         delegation_function_prompt=delegation_function_prompt,
         delegates=delegates,
