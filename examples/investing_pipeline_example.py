@@ -97,17 +97,14 @@ investor_agent = agent.create_agent_from_functions_list(functions=all_functions,
                                                         model_name=DEFAULT_MODEL)
 
 pipeline = EagerPipeline(default_agent=investor_agent, use_convert_to_bool_agent=True)
-own_30_shares, _ = pipeline.boolean_step("do I own more than 30 shares of TQQQ")
-if not own_30_shares:
+if not pipeline.boolean_step("do I own more than 30 shares of TQQQ")[0]:
     _, history_with_price = pipeline.step("check current price of TQQQ")
-    is_there_a_limit_sell_order, _ = pipeline.boolean_step("is there a limit sell order exists already?")
-    if not is_there_a_limit_sell_order:
+    if not pipeline.boolean_step("is there a limit sell order exists already?")[0]:
         pipeline.step("set limit sell order for TQQQ for price +4% of current price", history=history_with_price)
     else:
-        is_there_a_limit_buy_order, _ = pipeline.boolean_step("is there a limit buy order exists already?")
-        if is_there_a_limit_buy_order:
+        if pipeline.boolean_step("is there a limit buy order exists already?")[0]:
             if not pipeline.boolean_step(
-                    "is there current limit buy price lower than current price of TQQQ -5%?"):
+                    "is there current limit buy price lower than current price of TQQQ -5%?")[0]:
                 pipeline.step("cancel limit buy order for TQQQ")
                 pipeline.step(
                     """set limit buy order for TQQQ for price 3 percent below the current price. 
