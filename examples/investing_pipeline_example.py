@@ -94,11 +94,7 @@ all_functions = [
     check_how_many_shares_i_own
 ]
 investor_agent = agent.create_agent_from_functions_list(functions=all_functions,
-                                                        model_name=DEFAULT_MODEL,
-                                                        system_instruction="""You are an investor agent that can run set of actions.
-                                                        when you are executing the actions, do not try to call multipele meathod at once.
-                                                        You can only call one method at a time. But you can call a mathod, got a response and call another mathod.
-                                                        You can NOT execute arbitary pythong code, you ONLY can call maethods/tools avialbe to you.""")
+                                                        model_name=DEFAULT_MODEL)
 
 pipeline = EagerPipeline(default_agent=investor_agent, use_convert_to_bool_agent=True)
 own_30_shares, _ = pipeline.boolean_step("do I own more than 30 shares of TQQQ")
