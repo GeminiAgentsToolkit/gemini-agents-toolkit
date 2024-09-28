@@ -267,14 +267,18 @@ def create_agent_from_functions_list(
     # Hack to fix: https://github.com/googleapis/python-aiplatform/issues/4472
     if functions and len(functions) > 0:
         system_instruction = system_instruction or ""
-        system_instruction = f"""{system_instruction}\n\n## IMPORTANT
-                            You are anagent that can call a set of actions(functions).
-                            when you are executing the actions(functions), do not try to call multipele methods at once or in one code.
-                            You can only call one method at a time. But you can call a method, get a response and call another method.
-                            You can NOT execute arbitary pythong code either, you ONLY can call methods/tools avialbe to you.
-                            Also you can NOT try to evaluet anything as input argumetn to the funciton,
-                            For example: print(12 > 24) - INCORRECT
-                            print(False) - CORRECT (with the caveate that user provided to you method print that expect boolean as an input)"""
+        system_instruction = f"""{system_instruction}\n\n# IMPORTANT
+            You are an agent with the ability to call a set of actions (functions). Follow these rules strictly:
+
+            * You must only call one method at a time. Do not attempt to call multiple methods or functions in a single execution.
+            * You can call a method, get the response, and then call another method. Each method must be executed individually.
+            * You are not allowed to execute arbitrary Python code. Your only task is to call the available methods or tools.
+            * You cannot evaluate any expressions as input arguments to the function.
+                 * Example of incorrect usage: print(12 > 24) – Incorrect (this evaluates an expression).
+                 * Example of correct usage: print(False) – Correct, provided the print method accepts a boolean as input.
+            
+            If you attempt to execute code or evaluate expressions that are not allowed, your action will fail, and you must correct it.
+             Ensure that you strictly follow these instructions."""
     agent = GeminiAgent(
         delegation_function_prompt=delegation_function_prompt,
         delegates=delegates,

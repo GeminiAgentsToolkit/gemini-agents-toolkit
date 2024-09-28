@@ -25,7 +25,7 @@ class EagerPipeline(object):
             return self.agent
         raise ValueError("either default agent or local(per ste) agent should be set")
 
-    def if_step(self, prompt, then_steps, else_steps, *, agent=None, history=None):
+    def if_step(self, prompt, then_steps=None, else_steps=None, *, agent=None, history=None):
         agent_to_use = self._get_agent(agent)
         if self.logger:
             self.logger.info(f"if_step: {prompt}, then_steps: {then_steps}, else_steps: {else_steps}") 
