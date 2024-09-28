@@ -1,4 +1,4 @@
 APScheduler==3.10.4
 google-cloud-storage==2.18.2
-google-cloud-aiplatform==1.58.*
+google-cloud-aiplatform==1.68.*
 tenacity==9.0.*
