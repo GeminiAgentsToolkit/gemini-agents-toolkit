@@ -77,7 +77,7 @@ def set_limit_buy_order(price: float):
 
 def check_how_many_shares_i_own():
     """Check how many shares of TQQQ I own"""
-    return 30 + random.randint(-20, 1)
+    return 30 + random.randint(-5, 5)
 
 
 vertexai.init(project=PROJECT_ID, location=REGION)
@@ -97,21 +97,25 @@ investor_agent = agent.create_agent_from_functions_list(functions=all_functions,
                                                         model_name=DEFAULT_MODEL)
 
 pipeline = EagerPipeline(default_agent=investor_agent, use_convert_to_bool_agent=True)
-if not pipeline.boolean_step("do I own more than 30 shares of TQQQ"):
-    if not pipeline.boolean_step("is there a limit sell for TQQQ exists already?"):
-        pipeline.step("check current price of TQQQ")
-        pipeline.step("set limit sell order for TQQQ for price +4% of current price")
+_, history_with_price = pipeline.step("check current price of TQQQ")
+if pipeline.boolean_step("do I own more than 30 shares of TQQQ")[0]:
+    pipeline.if_step("is there NO limit sell order exists already?",
+                    then_steps=[
+                        "set limit sell order for TQQQ for price +4% of current price",
+                    ],
+                    history=history_with_price)
+else:
+    if pipeline.boolean_step("is there a limit buy order exists already?")[0]:
+        pipeline.if_step(
+            "is there current limit buy price lower than current price of TQQQ -5%?",
+            then_steps=[
+                "cancel limit buy order for TQQQ",
+                "set limit buy order for TQQQ for price 3 percent below the current price"
+            ],
+            history=history_with_price)
     else:
-        if pipeline.boolean_step("is there a limit buy exists already?"):
-            if not pipeline.boolean_step(
-                    "is there current limit buy price lower than current price of TQQQ -5%?"):
-                pipeline.step("cancel limit buy order")
-                pipeline.step(
-                    """set limit buy order for TQQQ for price 3 percent below the current price. 
-                    Do not return compute formula,
-                    do compute of the price yourself in your head""")
-        else:
-            pipeline.step(
-                """set limit buy order for TQQQ for price 3 percent below the current price. 
-                Do not return compute formula, do compute of the price yourself in your head""")
-print(pipeline.summary())
+        pipeline.step(
+            "set limit buy order for TQQQ for price 3 percent below the current price.", 
+            history=history_with_price)
+summary, _ = pipeline.summarize_full_history()
+print(summary)
