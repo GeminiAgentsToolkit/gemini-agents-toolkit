@@ -1,10 +1,12 @@
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.cron import CronTrigger, DateTrigger
 from google.cloud import storage
 from gemini_agents_toolkit.scheduler.task import LLMTask
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from dateutil import parser
 
 import json
+import pytz
+import datetime
 
 
 class ScheduledTaskExecutor:
@@ -71,18 +73,17 @@ class ScheduledTaskExecutor:
             negative_prompt: The prompt to be executed if the precondition is not met.
             frequency: The frequency of the task, ONLY supported: daily or 4_times_a_day. Default is 'daily'.
         """
-        if frequency != 'daily' and frequency != 'minute' and frequency != '4_times_a_day':
-            raise ValueError("Only daily and minute frequencies are supported")
         task = LLMTask(prompt, precondition_prompt=precondition_prompt, negative_prompt=negative_prompt, frequency=frequency)
+        
         cron_trigger = CronTrigger(hour='*/4') if frequency == '4_times_a_day' else CronTrigger(hour='1') 
         if frequency == 'minute':
             cron_trigger = CronTrigger(hour='*', minute='*')
         return self._add_task(task, cron_trigger)
     
-    def _add_task(self, task, cron_trigger, upload_to_gcs=True):
+    def _add_task(self, task, trigger, upload_to_gcs=True):
         gemini_agent = self.gemini_agent
         debug = self.debug
-        task.id = self.scheduler.add_job(execute_task, cron_trigger, args=[gemini_agent, task, debug]).id
+        task.id = self.scheduler.add_job(execute_task, trigger, args=[gemini_agent, task, debug]).id
         self.tasks.append(task)
         if self.gcs_blob and upload_to_gcs:
             self._upload_json_to_gcs()
@@ -130,7 +131,37 @@ class ScheduledTaskExecutor:
         """
         # convert all tasks to json and put to GCS
         
-    
+    def schedule_one_time_execution(self, prompt: str, execution_date_time: str):  # Changed type annotation
+        """
+        Schedules a one-time task execution at the specified date and time.
+        Uses fuzzy parsing to handle various date formats and assumes PST time zone.
+
+        Args:
+            prompt: The prompt to be executed as part of the task.
+            execution_date_time: The date and time of execution in a flexible string format (e.g., "tomorrow at 2:30 PM", "October 25th", "10/25/2024 10:00 AM").
+        """
+
+        try:
+            # Use dateutil's parser to handle flexible date formats
+            parsed_time = parser.parse(execution_date_time)
+
+            # Assume PST time zone
+            pst_timezone = pytz.timezone('America/Los_Angeles') 
+            parsed_time = pst_timezone.localize(parsed_time) 
+
+            # If the execution time is in the past, raise an error
+            if parsed_time < datetime.datetime.now(pytz.utc):  # Compare with UTC time
+                raise ValueError("Execution date and time must be in the future.")
+
+            task = LLMTask(prompt, frequency=execution_date_time)
+            trigger = DateTrigger(run_date=parsed_time)
+
+            return self._add_task(task, trigger)
+
+        except ValueError as e:
+            # Handle parsing errors or invalid date formats
+            return f"Error: {e}"
+
     @staticmethod
     def _parse_boolean_response(response):
         """

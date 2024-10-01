@@ -279,6 +279,7 @@ def create_agent_from_functions_list(
             scheduler_instance.add_task,
             scheduler_instance.get_all_jobs,
             scheduler_instance.delete_job,
+            scheduler_instance.schedule_one_time_execution
         ])
     if add_scheduling_functions and not on_message:
         # print warning
