@@ -94,7 +94,8 @@ all_functions = [
     check_how_many_shares_i_own
 ]
 investor_agent = agent.create_agent_from_functions_list(functions=all_functions,
-                                                        model_name=DEFAULT_MODEL)
+                                                        model_name=DEFAULT_MODEL,
+                                                        caching=True)
 
 pipeline = EagerPipeline(default_agent=investor_agent, use_convert_to_bool_agent=True)
 _, history_with_price = pipeline.step("check current price of TQQQ")

@@ -8,9 +8,6 @@ from vertexai.generative_models import Part, GenerativeModel
 from vertexai.generative_models import (
     FunctionDeclaration,
     Tool,
-    HarmCategory,
-    HarmBlockThreshold,
-    SafetySetting,
     GenerationConfig,
     Part,
     GenerativeModel
@@ -18,6 +15,7 @@ from vertexai.generative_models import (
 from config import (DEFAULT_MODEL)
 from gemini_agents_toolkit import scheduler
 from tenacity import retry, stop_after_attempt, wait_fixed
+from vertexai.preview import caching as gemini_caching
 
 
 def log_retry_error(retry_state):
@@ -41,7 +39,8 @@ class GeminiAgent:
             delegates=None,
             debug=False,
             on_message=None,
-            generation_config: GenerationConfig = None
+            generation_config: GenerationConfig = None,
+            caching=False
     ):
         if not functions:
             functions = []
@@ -65,10 +64,20 @@ class GeminiAgent:
         tools = None
         if func_declarations:
             tools = [Tool(function_declarations=func_declarations)]
-        self._model = GenerativeModel(model_name=model_name,
-                                      tools=tools,
-                                      system_instruction=system_instruction,
-                                      generation_config=generation_config)
+        if caching:
+            system_instruction_content = Part.from_text(system_instruction)
+            contents = [system_instruction_content]
+            self._model = gemini_caching.CachedContent.create(
+                model_name=model_name,
+                contents=contents,
+                tools=tools,
+                display_name="example-cache2",
+            )
+        else:
+            self._model = GenerativeModel(model_name=model_name,
+                                        tools=tools,
+                                        system_instruction=system_instruction,
+                                        generation_config=generation_config)
         self.chat = self._model.start_chat()
         self.debug = debug
         self._delegation_prompt_set = False
@@ -245,7 +254,8 @@ def create_agent_from_functions_list(
         delegation_function_prompt=None,
         delegates=None,
         on_message=None,
-        generation_config=None
+        generation_config=None,
+        caching=False
 ):
     """Create an agent with custom functions and other parameters received from user"""
     if functions is None:
@@ -287,7 +297,8 @@ def create_agent_from_functions_list(
         model_name=model_name,
         system_instruction=system_instruction,
         debug=debug,
-        generation_config=generation_config)
+        generation_config=generation_config,
+        caching=caching)
     if add_scheduling_functions:
         scheduler_instance.set_gemini_agent(agent)
         scheduler_instance.start_scheduler()
