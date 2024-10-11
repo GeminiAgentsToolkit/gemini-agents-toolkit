@@ -8,10 +8,11 @@ API_KEY =  os.getenv('GOOGLE_API_KEY')
 REGION = os.environ.get('GOOGLE_REGION', 'us-west1')
 
 # simple model is used for demo examples as a cost optimization
+EIGHT_B_MODEL = 'gemini-1.5-flash-8b'
 SIMPLE_MODEL = 'gemini-1.5-flash-002'
 PRO_MODEL = 'gemini-1.5-pro-002'
 
 # We highly recommend using the PRO model for production use cases
 # There is a huge bug related to funciton calling that is much more
 # prominent if falsh model is used.
-DEFAULT_MODEL = PRO_MODEL
+DEFAULT_MODEL = SIMPLE_MODEL

@@ -8,9 +8,7 @@ from vertexai.generative_models import Part, GenerativeModel
 from vertexai.generative_models import (
     FunctionDeclaration,
     Tool,
-    HarmCategory,
-    HarmBlockThreshold,
-    SafetySetting,
+    ToolConfig,
     GenerationConfig,
     Part,
     GenerativeModel
@@ -65,10 +63,19 @@ class GeminiAgent:
         tools = None
         if func_declarations:
             tools = [Tool(function_declarations=func_declarations)]
+        tool_config = ToolConfig(
+                    function_calling_config=ToolConfig.FunctionCallingConfig(
+                    # ANY mode forces the model to predict only function calls
+                    mode=ToolConfig.FunctionCallingConfig.Mode.ANY,
+            ))
         self._model = GenerativeModel(model_name=model_name,
                                       tools=tools,
                                       system_instruction=system_instruction,
                                       generation_config=generation_config)
+        self._model_name = model_name
+        self._tools = tools
+        self._system_instruction = system_instruction
+        self._generation_config = generation_config
         self.chat = self._model.start_chat()
         self.debug = debug
         self._delegation_prompt_set = False
@@ -153,10 +160,36 @@ class GeminiAgent:
         
         if self.debug:
             print(f"about to send msg: {msg}")
-        response = self.chat.send_message(msg)
+        response = None
+        try:
+            response = self.chat.send_message(msg)
+        except Exception as e:
+            if self.debug:
+                print(f"Error: {str(e)}")
+            # retrying with forced function calling
+            tool_config = ToolConfig(
+                    function_calling_config=ToolConfig.FunctionCallingConfig(
+                    # ANY mode forces the model to predict only function calls
+                    mode=ToolConfig.FunctionCallingConfig.Mode.ANY,
+            ))
+            original_model = self._model
+            self._model = GenerativeModel(model_name=self._model_name,
+                                      tools=self._tools,
+                                      tool_config=tool_config,
+                                      system_instruction=self._system_instruction,
+                                      generation_config=self._generation_config)
+            # if hasattr(self.chat, "_tool_config"):
+            #     original_tool_config = self.chat._tool_config
+            # self.chat.tool_config = tool_config
+            print(f"retrying with forced function calling: {self._model._tool_config}")
+            self.chat = self._model.start_chat()
+            response = self.chat.send_message(msg)
+            self._model = original_model
+            # self.chat.tool_config = original_tool_config
         if self.debug:
             print(f"msg: '{msg}' is out")
 
+        print("response: ", response)
         # Process any function calls until there are no more function calls in the response
         while response.candidates[0].function_calls:
             if self.debug:
