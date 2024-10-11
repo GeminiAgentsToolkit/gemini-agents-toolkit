@@ -45,7 +45,8 @@ class Pipeline(object):
         final_history = history
         if isinstance(steps, list):
             for step in steps:
-                final_result, final_history = self.step(step, agent=agent_to_use, history=final_history)
+                final_result, delta_history = self.step(step, agent=agent_to_use, history=final_history)
+                final_history += delta_history
         else:
             final_result, final_history = self.step(steps, agent=agent_to_use, history=final_history)
         return final_result, final_history
