@@ -171,7 +171,7 @@ class GeminiAgent:
                 Part.from_function_response(
                     name=function_call.name,
                     response={
-                        "content": api_response,
+                        "content": str(api_response),
                     },
                 ),
                 generation_config=generation_config
