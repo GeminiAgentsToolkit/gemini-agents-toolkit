@@ -6,7 +6,7 @@ import vertexai
 from json_agent import create_agent as create_json_agent
 from config import (PROJECT_ID, REGION, DEFAULT_MODEL)
 from gemini_agents_toolkit import agent
-from gemini_agents_toolkit.pipeline.eager_pipeline import EagerPipeline
+from gemini_agents_toolkit.pipeline import Pipeline
 
 
 def pwd() -> str:
@@ -74,8 +74,8 @@ fs_agent = agent.create_agent_from_functions_list(functions=all_functions, model
                                                   system_instruction=FS_AGENT_SYSTEM_INSTRUCTION)
 json_agent = create_json_agent(model_name=DEFAULT_MODEL)
 
-pipeline = EagerPipeline(default_agent=fs_agent)
-pipeline.step("read the content of the file examples/test.yaml")
-pipeline.step("convert yaml to json", agent=json_agent)
-pipeline.step("save json to file examples/test_out.json")
-print(pipeline.summary())
+pipeline = Pipeline(default_agent=fs_agent)
+_, history_step_1 = pipeline.step("read the content of the file examples/test.yaml")
+_, history_step_2 = pipeline.step("convert content of test.yaml to json", agent=json_agent, history=history_step_1)
+_, history_step_3 = pipeline.step("save json to file examples/test_out.json using valid json format without '\\n'", history=history_step_2)
+print(pipeline.summarize_full_history())

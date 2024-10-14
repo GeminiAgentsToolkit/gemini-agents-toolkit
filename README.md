@@ -158,8 +158,9 @@ python examples/multi_agent_example.py
 ```python
 import datetime
 import vertexai
-from config import (PROJECT_ID, REGION, SIMPLE_MODEL)
+from config import (PROJECT_ID, REGION, SIMPLE_MODEL, DEFAULT_MODEL)
 from gemini_agents_toolkit import agent
+from gemini_agents_toolkit.history_utils import summarize
 
 vertexai.init(project=PROJECT_ID, location=REGION)
 
@@ -175,7 +176,7 @@ def generate_duck_comms_agent():
         functions=[say_to_duck],
         delegation_function_prompt=("""Agent can communicat to ducks and can say something to them.
                                     And provides the answer from the duck."""),
-        model_name=SIMPLE_MODEL)
+        model_name=DEFAULT_MODEL)
 
 
 def generate_time_checker_agent():
@@ -198,8 +199,12 @@ main_agent = agent.create_agent_from_functions_list(
     delegates=[time_checker_agent, duck_comms_agent],
     model_name=SIMPLE_MODEL)
 
-print(main_agent.send_message("say to the duck message: I am hungry"))
-print(main_agent.send_message("can you tell me what time it is?"))
+result_say_operation, history_say_operation = main_agent.send_message("say to the duck message: I am hungry")
+result_time_operation, history_time_operation = main_agent.send_message("can you tell me what time it is?")
+
+print(result_say_operation)
+print(result_time_operation)
+print(summarize(agent=main_agent, history=history_say_operation + history_time_operation))
 ```
 </details>
 
