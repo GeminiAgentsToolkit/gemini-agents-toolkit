@@ -1,6 +1,6 @@
 from vertexai.generative_models import GenerationConfig
 from gemini_agents_toolkit.history_utils import summarize, print_history
-from gemini_agents_toolkit import agent
+from gemini_agents_toolkit import agent as agent_toolkit
 from config import (SIMPLE_MODEL)
 
 
@@ -16,14 +16,14 @@ class Pipeline(object):
                 response_mime_type="application/json",
                 temperature=0
             )
-            self.convert_to_bool_agent = agent.create_agent_from_functions_list(model_name=SIMPLE_MODEL, generation_config=generation_config)
+            self.convert_to_bool_agent = agent_toolkit.create_agent_from_functions_list(model_name=SIMPLE_MODEL, generation_config=generation_config)
 
     def _get_agent(self, agent):
         if agent:
             return agent
         if self.agent:
             return self.agent
-        raise ValueError("either default agent or local(per ste) agent should be set")
+        raise ValueError("either default agent or local(per step) agent should be set")
 
     def if_step(self, prompt, then_steps=None, else_steps=None, *, agent=None, history=None, debug=False):
         agent_to_use = self._get_agent(agent)
@@ -59,7 +59,7 @@ class Pipeline(object):
 
         if self.logger:
             self.logger.info(f"step: {prompt}")
-        prompt = f"""this is one step in the pipeline, this steps are user command but not comming direclty from the user:
+        prompt = f"""this is one step in the pipeline, this steps are user command but not coming directly from the user:
         user prompt: {prompt}"""
         agent_to_use = self._get_agent(agent)
         result, updated_history = agent_to_use.send_message(prompt, history=history)
@@ -75,14 +75,14 @@ class Pipeline(object):
     def boolean_step(self, prompt, *, agent=None, history=None, debug=False):
         if self.logger:
             self.logger.info(f"boolean_step: {prompt}")
-
+        
         if debug:
             print_history("*** INPUT HISTORY ***\n\n")
             print_history(history)
             print(f"###### => user prompt: {prompt}")
 
-        #TODO think to rename puser prompt to simple user question. 
-        prompt = f"""this is one step in the pipeline, this steps are user command but not comming direclty from the user:
+        #TODO think to rename user prompt to simple user question.
+        prompt = f"""this is one step in the pipeline, this steps are user command but not coming directly from the user:
         Following prompt provided by user, and user expects this to compute in a boolean yes/no answer, you have to return
         True/False and nothing else in your response. 
         Prompt: {prompt}
@@ -102,11 +102,11 @@ class Pipeline(object):
         self._full_history.extend(history)
         if "true" in bool_answer.lower():
             if self.logger:
-                self.logger.info(f"boolean_step: True")
+                self.logger.info("boolean_step: True")
             return True, history
         elif "false" in bool_answer.lower():
             if self.logger:
-                self.logger.info(f"boolean_step: False")
+                self.logger.info("boolean_step: False")
             return False, history
         else:
             if self.logger:

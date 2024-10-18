@@ -4,13 +4,9 @@ import logging
 import inspect
 import traceback
 import re
-from vertexai.generative_models import Part, GenerativeModel
 from vertexai.generative_models import (
     FunctionDeclaration,
     Tool,
-    HarmCategory,
-    HarmBlockThreshold,
-    SafetySetting,
     GenerationConfig,
     Part,
     GenerativeModel
@@ -89,7 +85,7 @@ class GeminiAgent:
             self.delegation_function_prompt = delegation_function_prompt
     
     def get_history(self):
-        # clone chat histor and return new list
+        # clone chat history and return a new list
         return list(self.chat._history)
     
     def set_history(self, history):
@@ -144,12 +140,12 @@ class GeminiAgent:
         self.chat = self._model.start_chat()
 
     @retry(stop=stop_after_attempt(5), wait=wait_fixed(1), after=log_retry_error)
-    def send_message(self, msg: str, *, generation_config: GenerationConfig = None, history = None) -> str:
+    def send_message(self, msg: str, *, generation_config: GenerationConfig = None, history = None) -> tuple[str, list]:
         """Initiate communication with LLM to execute user's instructions"""
-        intial_history_len = 0
+        initial_history_len = 0
         if history:
             self.set_history(history)
-            intial_history_len = len(history)
+            initial_history_len = len(history)
         
         if self.debug:
             print(f"about to send msg: {msg}")
@@ -180,15 +176,15 @@ class GeminiAgent:
         if self.on_message is not None:
             self.on_message(response.text)
         # Extract the text from the final model response
-        respnose_text = "DONE"
+        response_text = "DONE"
         try:
-            respnose_text = response.candidates[0].text
+            response_text = response.candidates[0].text
         except Exception as e:
             print(f"Error: {str(e)}")
 
         current_history = self.get_history()
         self._recreate_client()
-        return respnose_text, current_history[intial_history_len:]
+        return response_text, current_history[initial_history_len:]
 
 # pylint: disable-next=too-many-locals
 def _generate_function_declaration(func, *, user_set_name=None, user_set_description=None):
