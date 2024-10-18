@@ -23,3 +23,10 @@ def trim_history(*, history, max_length):
                 break
 
     return list(reversed(trimmed_history))
+
+
+def print_history(history):
+    """Print the history"""
+    for h in history:
+        if hasattr(h, "text"):
+            print(f"{h.role}: {h.text}")

@@ -1,5 +1,5 @@
 from vertexai.generative_models import GenerationConfig
-from gemini_agents_toolkit.history_utils import summarize
+from gemini_agents_toolkit.history_utils import summarize, print_history
 from gemini_agents_toolkit import agent
 from config import (SIMPLE_MODEL)
 
@@ -25,19 +25,19 @@ class Pipeline(object):
             return self.agent
         raise ValueError("either default agent or local(per ste) agent should be set")
 
-    def if_step(self, prompt, then_steps=None, else_steps=None, *, agent=None, history=None):
+    def if_step(self, prompt, then_steps=None, else_steps=None, *, agent=None, history=None, debug=False):
         agent_to_use = self._get_agent(agent)
         if self.logger:
             self.logger.info(f"if_step: {prompt}, then_steps: {then_steps}, else_steps: {else_steps}") 
         bool_result, updated_history = self.boolean_step(prompt, agent=agent_to_use, history=history)
         if bool_result:
             if then_steps:
-                return self.steps(then_steps, agent=agent_to_use, history=updated_history)
+                return self.steps(then_steps, agent=agent_to_use, history=updated_history, debug=debug)
         else:
             if else_steps:
-                return self.steps(else_steps, agent=agent_to_use, history=updated_history)
+                return self.steps(else_steps, agent=agent_to_use, history=updated_history, debug=debug)
 
-    def steps(self, steps, *, agent=None, history=None):
+    def steps(self, steps, *, agent=None, history=None, debug=False):
         agent_to_use = self._get_agent(agent)
         if history:
             agent_to_use.set_history(history)
@@ -45,13 +45,18 @@ class Pipeline(object):
         final_history = history
         if isinstance(steps, list):
             for step in steps:
-                final_result, delta_history = self.step(step, agent=agent_to_use, history=final_history)
+                final_result, delta_history = self.step(step, agent=agent_to_use, history=final_history, debug=debug)
                 final_history += delta_history
         else:
-            final_result, final_history = self.step(steps, agent=agent_to_use, history=final_history)
+            final_result, final_history = self.step(steps, agent=agent_to_use, history=final_history, debug=debug)
         return final_result, final_history
 
-    def step(self, prompt, *, agent=None, history=None):
+    def step(self, prompt, *, agent=None, history=None, debug=False):
+        if debug:
+            print_history("*** INPUT HISTORY ***\n\n")
+            print_history(history)
+            print(f"###### => user prompt: {prompt}")
+
         if self.logger:
             self.logger.info(f"step: {prompt}")
         prompt = f"""this is one step in the pipeline, this steps are user command but not comming direclty from the user:
@@ -59,15 +64,26 @@ class Pipeline(object):
         agent_to_use = self._get_agent(agent)
         result, updated_history = agent_to_use.send_message(prompt, history=history)
         self._full_history.extend(updated_history)
+
+        if debug:
+            print(f"###### => response from agent: {result}")
+            print("@@@@@@@ updated history @@@@@@@ \n")
+            print_history(updated_history)
+        
         return result, updated_history
     
-    def boolean_step(self, prompt, *, agent=None, history=None):
+    def boolean_step(self, prompt, *, agent=None, history=None, debug=False):
         if self.logger:
             self.logger.info(f"boolean_step: {prompt}")
 
+        if debug:
+            print_history("*** INPUT HISTORY ***\n\n")
+            print_history(history)
+            print(f"###### => user prompt: {prompt}")
+
         #TODO think to rename puser prompt to simple user question. 
         prompt = f"""this is one step in the pipeline, this steps are user command but not comming direclty from the user:
-        Following prompt provided by user, and user expects this to compute in a boolean yes/no answer, you have to retunr
+        Following prompt provided by user, and user expects this to compute in a boolean yes/no answer, you have to return
         True/False and nothing else in your response. 
         Prompt: {prompt}
         
@@ -77,6 +93,12 @@ class Pipeline(object):
         bool_answer, history = agent_to_use.send_message(prompt, history=history)
         if self.convert_to_bool_agent:
             bool_answer, _ = self.convert_to_bool_agent.send_message(f"please convert to best fitting response True/False here is answer:{bool_answer}, \n question was: {prompt}")
+        
+        if debug:
+            print(f"###### => response from agent: {bool_answer}")
+            print("@@@@@@@ updated history @@@@@@@ \n")
+            print_history(history)
+        
         self._full_history.extend(history)
         if "true" in bool_answer.lower():
             if self.logger:
@@ -98,3 +120,5 @@ class Pipeline(object):
     def get_full_history(self):
         return self._full_history
     
+    def print_full_history(self):
+        print_history(self.get_full_history())
