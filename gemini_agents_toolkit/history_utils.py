@@ -27,6 +27,11 @@ def trim_history(*, history, max_length):
 
 def print_history(history):
     """Print the history"""
+    if not history:
+        return
+    
     for h in history:
         if hasattr(h, "text"):
             print(f"{h.role}: {h.text}")
+        if hasattr(h, "function_call"):
+            print(f"Function called: {h.function_call.name}")

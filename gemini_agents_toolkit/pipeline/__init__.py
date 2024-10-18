@@ -5,10 +5,11 @@ from config import (SIMPLE_MODEL)
 
 
 class Pipeline(object):
-    def __init__(self, *, default_agent=None, logger=None, use_convert_to_bool_agent=False):
+    def __init__(self, *, default_agent=None, logger=None, use_convert_to_bool_agent=False, debug=False):
         self.agent = default_agent
         self.logger = logger
         self._full_history = []
+        self.debug = debug
         if use_convert_to_bool_agent:
             response_schema = {"type": "STRING", "enum": ["True", "False"]}
             generation_config = GenerationConfig(
@@ -52,10 +53,11 @@ class Pipeline(object):
         return final_result, final_history
 
     def step(self, prompt, *, agent=None, history=None, debug=False):
-        if debug:
+        debug_mode = self.debug or debug
+        if debug_mode:
+            print(f"###### START OF\n=> user prompt: {prompt}")
             print_history("*** INPUT HISTORY ***\n\n")
             print_history(history)
-            print(f"###### => user prompt: {prompt}")
 
         if self.logger:
             self.logger.info(f"step: {prompt}")
@@ -65,21 +67,23 @@ class Pipeline(object):
         result, updated_history = agent_to_use.send_message(prompt, history=history)
         self._full_history.extend(updated_history)
 
-        if debug:
+        if debug_mode:
             print(f"###### => response from agent: {result}")
             print("@@@@@@@ updated history @@@@@@@ \n")
             print_history(updated_history)
+            print(f"###### END OF\n=> user prompt: {prompt}\n#################\n\n\n")
         
         return result, updated_history
     
     def boolean_step(self, prompt, *, agent=None, history=None, debug=False):
+        debug_mode = self.debug or debug
         if self.logger:
             self.logger.info(f"boolean_step: {prompt}")
         
-        if debug:
+        if debug_mode:
+            print(f"###### START OF\n=> user prompt: {prompt}")
             print_history("*** INPUT HISTORY ***\n\n")
             print_history(history)
-            print(f"###### => user prompt: {prompt}")
 
         #TODO think to rename user prompt to simple user question.
         prompt = f"""this is one step in the pipeline, this steps are user command but not coming directly from the user:
@@ -94,10 +98,11 @@ class Pipeline(object):
         if self.convert_to_bool_agent:
             bool_answer, _ = self.convert_to_bool_agent.send_message(f"please convert to best fitting response True/False here is answer:{bool_answer}, \n question was: {prompt}")
         
-        if debug:
+        if debug_mode:
             print(f"###### => response from agent: {bool_answer}")
             print("@@@@@@@ updated history @@@@@@@ \n")
             print_history(history)
+            print(f"###### END OF\n=> user prompt: {prompt}\n#################\n\n\n")
         
         self._full_history.extend(history)
         if "true" in bool_answer.lower():
