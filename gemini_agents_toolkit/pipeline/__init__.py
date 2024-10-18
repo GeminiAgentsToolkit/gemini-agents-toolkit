@@ -75,6 +75,34 @@ class Pipeline(object):
         
         return result, updated_history
     
+    def float_step(self, prompt, *, agent=None, history=None, debug=False):
+        debug_mode = self.debug or debug
+        if self.logger:
+            self.logger.info(f"integer_step: {prompt}")
+        
+        if debug_mode:
+            print(f"###### START OF\n=> user prompt: {prompt}")
+            print_history("*** INPUT HISTORY ***\n\n")
+            print_history(history)
+
+        agent_to_use = self._get_agent(agent)
+        prompt = f"""this is one step in the pipeline, this steps are user command but not coming directly from the user:
+        Following prompt provided by user, and user expects this to compute in a number(float or integer) answer, you have to return
+        a number(float or integer) and nothing else in your response. 
+        Prompt: {prompt}
+        
+        IMPORTANT: remember you ONLY can return integer number(float or integer), no print(...) or any computational code or any other print statement"""
+        int_answer, history = agent_to_use.send_message(prompt, history=history)
+        
+        if debug_mode:
+            print(f"###### => response from agent: {int_answer}")
+            print("@@@@@@@ updated history @@@@@@@ \n")
+            print_history(history)
+            print(f"###### END OF\n=> user prompt: {prompt}\n#################\n\n\n")
+        
+        self._full_history.extend(history)
+        return float(int_answer), history
+    
     def boolean_step(self, prompt, *, agent=None, history=None, debug=False):
         debug_mode = self.debug or debug
         if self.logger:
