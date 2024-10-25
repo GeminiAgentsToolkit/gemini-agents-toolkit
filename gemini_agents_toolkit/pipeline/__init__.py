@@ -4,20 +4,85 @@ from gemini_agents_toolkit import agent as agent_toolkit
 from config import (SIMPLE_MODEL)
 
 
+CONVERT_BOT_SYSTEM_INSTRUCTIONS = """There is another agent that produces answer, these answer should comply with the specific schema.
+However time to time agent might product results that is NOT exactly following the schema, you main task will be to be fixing such cases.
+You will be getting in the input - message from this other agent and a schema that answer should comply with. 
+If the message already compy with the schema, you do not have to do anything, just return the message as it is.
+If it does not, you have to do you best to convert the message to comply with the schema.
+Do you best to contract the best answer or return None if you can not convert the message to comply with the schema.
+Your output should be JSON, however under NO circumstances you should print anything before/after the JSON, or any other computational code.
+Do not put, for example ```json or ``` in the output, just the JSON. Your output will be used AS IS as a json response."""
+BOOLEAN_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "content": {
+            "type": "STRING", 
+            "enum": ["True", "False"]
+        }
+    }
+}
+FLOAT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "content": {
+            "type": "number",
+            "format": "float"
+        }
+    }
+}
+INT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "content": {
+            "type": "INTEGER"
+        }
+    }
+}
+CHAR_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "content": {
+            "type": "STRING"
+        }
+    }
+}
+STRING_ARRAY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "content": {
+            "type": "ARRAY",
+            "items": {
+                "type": "STRING"
+            }
+        }
+    }
+}
+
+
 class Pipeline(object):
-    def __init__(self, *, default_agent=None, logger=None, use_convert_to_bool_agent=False, debug=False):
+    def __init__(self, *, default_agent=None, logger=None, use_convert_to_bool_agent=False, use_convert_agent_helper=False, debug=False):
         self.agent = default_agent
         self.logger = logger
         self._full_history = []
         self.debug = debug
-        if use_convert_to_bool_agent:
-            response_schema = {"type": "STRING", "enum": ["True", "False"]}
-            generation_config = GenerationConfig(
-                response_schema=response_schema,
-                response_mime_type="application/json",
-                temperature=0
-            )
-            self.convert_to_bool_agent = agent_toolkit.create_agent_from_functions_list(model_name=SIMPLE_MODEL, generation_config=generation_config)
+        if use_convert_agent_helper or use_convert_to_bool_agent:
+            self.convert_agent = agent_toolkit.create_agent_from_functions_list(
+                model_name=SIMPLE_MODEL, system_instruction=CONVERT_BOT_SYSTEM_INSTRUCTIONS)
+
+    def _convert_to_type(self, message, return_type_schema):
+        if not self.convert_agent:
+            return message
+        generation_config = GenerationConfig(
+            response_schema=return_type_schema,
+            response_mime_type="application/json"
+        )
+        message_to_agent = f"response from other agent: {message}, expected schema: {return_type_schema}"
+        response, history = self.convert_agent.send_message(message_to_agent, generation_config=generation_config)
+        self._full_history.extend(history)
+        if "```json" in response:
+            response = response.replace("```json","")
+            response = response.replace("```", "")
+        return eval(response)["content"]
 
     def _get_agent(self, agent):
         if agent:
@@ -75,80 +140,68 @@ class Pipeline(object):
         
         return result, updated_history
     
-    def float_step(self, prompt, *, agent=None, history=None, debug=False):
-        debug_mode = self.debug or debug
-        if self.logger:
-            self.logger.info(f"integer_step: {prompt}")
-        
-        if debug_mode:
-            print(f"###### START OF\n=> user prompt: {prompt}")
-            print_history("*** INPUT HISTORY ***\n\n")
-            print_history(history)
+    def char_step(self, prompt, *, agent=None, history=None, debug=False):
+         char_answer, history = self._typed_step(prompt, agent=agent, history=history, debug=debug, type_schema=CHAR_SCHEMA)
+         return char_answer, history
 
-        agent_to_use = self._get_agent(agent)
-        prompt = f"""this is one step in the pipeline, this steps are user command but not coming directly from the user:
-        Following prompt provided by user, and user expects this to compute in a number(float or integer) answer, you have to return
-        a number(float or integer) and nothing else in your response. 
-        Prompt: {prompt}
-        
-        IMPORTANT: remember you ONLY can return integer number(float or integer), no print(...) or any computational code or any other print statement"""
-        int_answer, history = agent_to_use.send_message(prompt, history=history)
-        
-        if debug_mode:
-            print(f"###### => response from agent: {int_answer}")
-            print("@@@@@@@ updated history @@@@@@@ \n")
-            print_history(history)
-            print(f"###### END OF\n=> user prompt: {prompt}\n#################\n\n\n")
-        
-        self._full_history.extend(history)
-        return float(int_answer), history
+    def float_step(self, prompt, *, agent=None, history=None, debug=False):
+        float_answer, history = self._typed_step(prompt, agent=agent, history=history, debug=debug, type_schema=FLOAT_SCHEMA)
+        return float(float_answer), history
     
     def boolean_step(self, prompt, *, agent=None, history=None, debug=False):
-        debug_mode = self.debug or debug
+        bool_answer, history = self._typed_step(prompt, agent=agent, history=history, debug=debug, type_schema=BOOLEAN_SCHEMA)
+        return eval(bool_answer), history
+
+    def int_step(self, prompt, *, agent=None, history=None, debug=False):
+        int_answer, history = self._typed_step(prompt, agent=agent, history=history, debug=debug, type_schema=INT_SCHEMA)
+        return int(int_answer), history
+
+    def string_array_step(self, prompt, *, agent=None, history=None, debug=False):
+        string_array_answer, history = self._typed_step(prompt, agent=agent, history=history, debug=debug, type_schema=STRING_ARRAY_SCHEMA)
+        return string_array_answer, history
+
+    def _log_info(self, message):
         if self.logger:
-            self.logger.info(f"boolean_step: {prompt}")
-        
+            self.logger.info(message)
+
+    def _typed_step(self, prompt, *, agent=None, history=None, debug=False, type_schema):
+        debug_mode = self.debug or debug
+        self._log_info(f"boolean_step: {prompt}")
+
         if debug_mode:
             print(f"###### START OF\n=> user prompt: {prompt}")
-            print_history("*** INPUT HISTORY ***\n\n")
+            print("*** INPUT HISTORY ***\n\n")
             print_history(history)
 
         #TODO think to rename user prompt to simple user question.
         prompt = f"""this is one step in the pipeline, this steps are user command but not coming directly from the user:
-        Following prompt provided by user, and user expects this to compute in a boolean yes/no answer, you have to return
-        True/False and nothing else in your response. 
+        Following prompt provided by user, and user expects this to have answer following the json schema:
+        {type_schema}
+        you have to return respones with the JSON that comply with the schema ONLY.
         Prompt: {prompt}
         
-        IMPORTANT: remember you ONLY can return True/False, no print(False) or print(True) or any other print statement"""
+        IMPORTANT: remember you ONLY can return answer that comply with the schema, no print(...) or any computational code or any other print statement"""
         agent_to_use = self._get_agent(agent)
-       
-        bool_answer, history = agent_to_use.send_message(prompt, history=history)
-        if self.convert_to_bool_agent:
-            bool_answer, _ = self.convert_to_bool_agent.send_message(f"please convert to best fitting response True/False here is answer:{bool_answer}, \n question was: {prompt}")
-        
+
+        original_typed_answer, history = agent_to_use.send_message(prompt, history=history)
+        typed_answer = self._convert_to_type(original_typed_answer, type_schema)
+
         if debug_mode:
-            print(f"###### => response from agent: {bool_answer}")
+            print(f"###### => original response from agent: {original_typed_answer}")
+            print(f"###### => upated response from agent: {typed_answer}")
+            print(f"###### => enforced schema: {type_schema}")
             print("@@@@@@@ updated history @@@@@@@ \n")
             print_history(history)
             print(f"###### END OF\n=> user prompt: {prompt}\n#################\n\n\n")
-        
+
         self._full_history.extend(history)
-        if "true" in bool_answer.lower():
-            if self.logger:
-                self.logger.info("boolean_step: True")
-            return True, history
-        elif "false" in bool_answer.lower():
-            if self.logger:
-                self.logger.info("boolean_step: False")
-            return False, history
-        else:
-            if self.logger:
-                self.logger.debug(f"prompt:{prompt}\nanswer:{bool_answer}")
-            raise ValueError("Invalid response from user, expected True/False only")
+        return typed_answer, history
         
     def summarize_full_history(self, *, agent=None):
-        agent_to_use = self._get_agent(agent)
-        return summarize(agent=agent_to_use, history=self._full_history)
+         agent_to_use = self._get_agent(agent)
+         print(str(self._full_history))
+         
+         return summarize(agent=agent_to_use, history=self._full_history)
     
     def get_full_history(self):
         return self._full_history
