@@ -6,6 +6,14 @@ def summarize(*, agent, history):
     return agent.send_message(prompt, history=history)
 
 
+def calculate_total_tokens_used_per_model(*, history):
+    """Calculate the total number of tokens used in the history"""
+    tokens_per_model = {}
+    for h in history:
+        tokens_per_model.update(h.get("tokens_used", {}))
+    return tokens_per_model
+
+
 def trim_history(*, history, max_length):
     """Trim history to only include the last specified number of user messages"""
     if len(history) <= max_length:

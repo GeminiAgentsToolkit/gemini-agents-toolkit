@@ -1,5 +1,5 @@
 from vertexai.generative_models import GenerationConfig
-from gemini_agents_toolkit.history_utils import summarize, print_history
+from gemini_agents_toolkit.history_utils import summarize, print_history, calculate_total_tokens_used_per_model
 from gemini_agents_toolkit import agent as agent_toolkit
 from config import (SIMPLE_MODEL)
 
@@ -198,10 +198,13 @@ class Pipeline(object):
         return typed_answer, history
         
     def summarize_full_history(self, *, agent=None):
-         agent_to_use = self._get_agent(agent)
-         print(str(self._full_history))
-         
-         return summarize(agent=agent_to_use, history=self._full_history)
+        agent_to_use = self._get_agent(agent)
+        print(str(self._full_history))
+
+        summary_text, history = summarize(agent=agent_to_use, history=self._full_history)
+        self._full_history.extend(history)
+        tokens_per_model = calculate_total_tokens_used_per_model(history=self._full_history)
+        return f"SUMMARY:\n{summary_text}\n\nTOKENS USED:\n{str(tokens_per_model)}", history
     
     def get_full_history(self):
         return self._full_history
