@@ -80,8 +80,7 @@ class Pipeline(object):
         response, history = self.convert_agent.send_message(message_to_agent, generation_config=generation_config)
         self._full_history.extend(history)
         if "```json" in response:
-            response = response.replace("```json","")
-            response = response.replace("```", "")
+            response = response.replace("```json","").replace("```", "")
         return eval(response)["content"]
 
     def _get_agent(self, agent):

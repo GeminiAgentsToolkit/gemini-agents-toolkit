@@ -12,11 +12,11 @@ msg, _ = pipeline.float_step("60 - 5% is?")
 
 print(msg)
 
-msg, _ = pipeline.int_step("60 - 5?")
+msg, _ = pipeline.int_step("22 - 53?")
 
 print(msg)
 
-msg, _ = pipeline.char_step("first character of the world 'hello' is?")
+msg, _ = pipeline.char_step("first character of the word 'hello' is?")
 
 print(msg)
 
