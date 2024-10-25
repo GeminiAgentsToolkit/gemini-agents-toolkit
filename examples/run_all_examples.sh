@@ -1,5 +1,6 @@
 #!/bin/bash
 
+python ./examples/typed_steps.py
 python ./examples/simple_example.py
 python ./examples/multi_agent_example.py
 python ./examples/investing_pipeline_example.py
