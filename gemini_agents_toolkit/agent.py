@@ -41,6 +41,7 @@ class GeminiAgent:
     ):
         if not functions:
             functions = []
+        self.history = []
         self.functions = {func.__name__: func for func in functions}
         func_declarations = [_generate_function_declaration(func) for func in functions]
         if delegates is not None:
@@ -86,14 +87,14 @@ class GeminiAgent:
     
     def get_history(self):
         # clone chat history and return a new list
-        return list(self.chat._history)
+        return self.history.copy()
     
     def set_history(self, history):
         new_history = []
         for message in history:
             new_history.append(message)
             new_parts = []
-            for part in message.parts:
+            for part in message["raw"].parts:
                 if hasattr(part, "text"):
                     new_parts.append(part)
                 if hasattr(part, "function_call"):
@@ -104,8 +105,10 @@ class GeminiAgent:
                     func_name = part.function_response.name
                     if func_name in self.functions:
                         new_parts.append(part)
-            message._parts = new_parts
-        self.chat._history = new_history
+            message["raw"]._parts = new_parts
+        raw_history = [message["raw"] for message in history]
+        self.chat._history = raw_history
+        self.history = new_history
 
     def _call_function(self, function_call):
         if self.debug:
@@ -139,6 +142,11 @@ class GeminiAgent:
     def _recreate_client(self):
         self.chat = self._model.start_chat()
 
+    def _updated_tokens_count(self, updates_tokens_count, response):
+        current_count = updates_tokens_count.get(response._raw_response.model_version, 0)
+        current_count += response.usage_metadata.total_token_count
+        updates_tokens_count[response._raw_response.model_version] = current_count
+
     @retry(stop=stop_after_attempt(5), wait=wait_fixed(1), after=log_retry_error)
     def send_message(self, msg: str, *, generation_config: GenerationConfig = None, history = None) -> tuple[str, list]:
         """Initiate communication with LLM to execute user's instructions"""
@@ -146,6 +154,7 @@ class GeminiAgent:
         if history:
             self.set_history(history)
             initial_history_len = len(history)
+        updates_tokens_count = {}
         
         if self.debug:
             print(f"about to send msg: {msg}")
@@ -155,6 +164,7 @@ class GeminiAgent:
 
         # Process any function calls until there are no more function calls in the response
         while response.candidates[0].function_calls:
+            self._updated_tokens_count(updates_tokens_count, response)
             if self.debug:
                 print(f"function call found: {response.candidates[0].function_calls[0]}")
             function_call = response.candidates[0].function_calls[0]
@@ -177,14 +187,22 @@ class GeminiAgent:
             self.on_message(response.text)
         # Extract the text from the final model response
         response_text = "DONE"
+        self._updated_tokens_count(updates_tokens_count, response)
         try:
             response_text = response.candidates[0].text
         except Exception as e:
             print(f"Error: {str(e)}")
 
-        current_history = self.get_history()
+        history_delta = self.chat._history[initial_history_len:]
+        for raw_history_item in history_delta:
+            history_item = {
+                "raw": raw_history_item,
+                "tokens_used": {},
+            }
+            self.history.append(history_item)
+        self.history[-1]["tokens_used"] = updates_tokens_count
         self._recreate_client()
-        return response_text, current_history[initial_history_len:]
+        return response_text, self.history[initial_history_len:]
 
 # pylint: disable-next=too-many-locals
 def _generate_function_declaration(func, *, user_set_name=None, user_set_description=None):
