@@ -1,3 +1,9 @@
+from vertexai.generative_models import (
+    Content,
+    Part
+)
+
+
 def summarize(*, agent, history):
     """Summarize the pipeline"""
     prompt = """Now if the final step of the pipeline/dialog, provide summary of main things that were done and why.
@@ -39,7 +45,36 @@ def print_history(history):
         return
     
     for h in history:
-        if hasattr(h, "text"):
-            print(f"{h.role}: {h.text}")
+        raw_h = h["raw"]
+        if hasattr(raw_h.parts[0], "text"):
+            print(f"{raw_h.role}: {raw_h.parts[0].text}")
         if hasattr(h, "function_call"):
             print(f"Function called: {h.function_call.name}")
+
+
+def to_serializable_list(history):
+    result_history = []
+    for h in history:
+        raw_h = h["raw"]
+        if hasattr(raw_h.parts[0], "text"):
+            result_history.append(
+                {
+                    "role": raw_h.role,
+                    "text": raw_h.parts[0].text
+                }
+            )
+    return result_history
+
+
+def from_serializable_list(list_with_history):
+    history = []
+    for h in list_with_history:
+        history.append(
+            {
+                'raw': Content(
+                    role=h["role"],
+                    parts=[Part.from_text(h["text"])]
+                )
+            }
+        )
+    return history
