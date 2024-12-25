@@ -13,7 +13,7 @@ from vertexai.generative_models import (
 )
 from config import (DEFAULT_MODEL)
 from gemini_agents_toolkit import scheduler
-from tenacity import retry, stop_after_attempt, wait_fixed
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 
 def log_retry_error(retry_state):
@@ -147,7 +147,7 @@ class GeminiAgent:
         current_count += response.usage_metadata.total_token_count
         updates_tokens_count[response._raw_response.model_version] = current_count
 
-    @retry(stop=stop_after_attempt(5), wait=wait_fixed(1), after=log_retry_error)
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=2, min=2, max=16), after=log_retry_error)
     def send_message(self, msg: str, *, generation_config: GenerationConfig = None, history = None) -> tuple[str, list]:
         """Initiate communication with LLM to execute user's instructions"""
         initial_history_len = 0
