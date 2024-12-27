@@ -31,7 +31,7 @@ def trim_history(*, history, max_length):
     # Iterate through the history in reverse
     for h in reversed(history):
         trimmed_history.append(h)
-        if h.role == "user":
+        if h["raw"].role == "user":
             user_messages_count += 1
             if user_messages_count == max_length:
                 break
