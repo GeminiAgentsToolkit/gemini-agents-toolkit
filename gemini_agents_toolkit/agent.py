@@ -73,7 +73,7 @@ class GeminiAgent:
                                       generation_config=generation_config)
         self.chat = self._model.start_chat()
         self.debug = debug
-        self.function_call_limit_per_chat = function_call_limit_per_chat if function_call_limit_per_chat is not None else 10
+        self.function_call_limit_per_chat = function_call_limit_per_chat
         self._delegation_prompt_set = False
         self.on_message = on_message
         self.delegation_function_prompt = delegation_function_prompt
@@ -173,7 +173,7 @@ class GeminiAgent:
         # Process any function calls until there are no more function calls in the response
         while response.candidates[0].function_calls:
             function_call_counter = function_call_counter + 1
-            if function_call_counter >= self.function_call_limit_per_chat:
+            if self.function_call_limit_per_chat and function_call_counter >= self.function_call_limit_per_chat:
                 raise TooManyFunctionCallsException(
                     f"Exceed allowed number of function calls: {self.function_call_limit_per_chat}", 
                     self.chat._history[initial_history_len:]
