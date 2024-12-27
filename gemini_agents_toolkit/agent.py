@@ -153,7 +153,7 @@ class GeminiAgent:
         current_count += response.usage_metadata.total_token_count
         updates_tokens_count[response._raw_response.model_version] = current_count
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=2, min=2, max=16), after=log_retry_error)
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=2, min=2, max=16), after=log_retry_error, retry_if_not_exception_type=TooManyFunctionCallsException)
     def send_message(self, msg: str, *, generation_config: GenerationConfig = None, history = None) -> tuple[str, list]:
         """Initiate communication with LLM to execute user's instructions"""
         initial_history_len = 0
