@@ -15,8 +15,10 @@ from config import (DEFAULT_MODEL)
 from gemini_agents_toolkit import scheduler
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-class TooManyFunctionCalls(Exception):
-    pass
+class TooManyFunctionCallsException(Exception):
+    def __init__(self,message,call_history:list):
+        super().__init__(message)
+        self.call_history = call_history
 
 
 def log_retry_error(retry_state):
@@ -190,7 +192,7 @@ class GeminiAgent:
 
             function_call_counter = function_call_counter + 1
             if function_call_counter >= limit_function_calls_to:
-                raise TooManyFunctionCalls(f"Exceed allowed number of function calls: {limit_function_calls_to}")
+                raise TooManyFunctionCallsException(f"Exceed allowed number of function calls: {limit_function_calls_to}", self.chat._history[initial_history_len:])
 
         if self.on_message is not None:
             self.on_message(response.text)
