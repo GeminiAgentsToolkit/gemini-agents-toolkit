@@ -15,6 +15,9 @@ from config import (DEFAULT_MODEL)
 from gemini_agents_toolkit import scheduler
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+class TooManyFunctionCalls(Exception):
+    pass
+
 
 def log_retry_error(retry_state):
     """Logs the retry attempt details including the error message."""
@@ -148,7 +151,7 @@ class GeminiAgent:
         updates_tokens_count[response._raw_response.model_version] = current_count
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=2, min=2, max=16), after=log_retry_error)
-    def send_message(self, msg: str, *, generation_config: GenerationConfig = None, history = None) -> tuple[str, list]:
+    def send_message(self, msg: str, *, generation_config: GenerationConfig = None, history = None, limit_function_calls_to = 10) -> tuple[str, list]:
         """Initiate communication with LLM to execute user's instructions"""
         initial_history_len = 0
         if history:
@@ -161,6 +164,8 @@ class GeminiAgent:
         response = self.chat.send_message(msg)
         if self.debug:
             print(f"msg: '{msg}' is out")
+
+        function_call_counter = 0
 
         # Process any function calls until there are no more function calls in the response
         while response.candidates[0].function_calls:
@@ -182,6 +187,10 @@ class GeminiAgent:
                 ),
                 generation_config=generation_config
             )
+
+            function_call_counter = function_call_counter + 1
+            if function_call_counter >= limit_function_calls_to:
+                raise TooManyFunctionCalls(f"Exceed allowed number of function calls: {limit_function_calls_to}")
 
         if self.on_message is not None:
             self.on_message(response.text)
