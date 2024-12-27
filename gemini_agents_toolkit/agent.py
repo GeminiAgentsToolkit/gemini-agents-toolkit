@@ -173,7 +173,7 @@ class GeminiAgent:
         # Process any function calls until there are no more function calls in the response
         while response.candidates[0].function_calls:
             function_call_counter = function_call_counter + 1
-            if self.function_call_limit_per_chat and function_call_counter >= self.function_call_limit_per_chat:
+            if self.function_call_limit_per_chat is not None and function_call_counter >= self.function_call_limit_per_chat:
                 raise TooManyFunctionCallsException(
                     f"Exceed allowed number of function calls: {self.function_call_limit_per_chat}", 
                     self.chat._history[initial_history_len:]
