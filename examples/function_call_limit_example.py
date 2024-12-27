@@ -16,10 +16,11 @@ vertexai.init(project=PROJECT_ID, location=REGION)
 
 all_functions = [say_to_duck]
 duck_comms_agent = agent.create_agent_from_functions_list(functions=all_functions,
+                                                          function_call_limit_per_chat=0,
                                                           model_name=SIMPLE_MODEL)
 
 try:
-    msg, history = duck_comms_agent.send_message("say to the duck message: I am hungry", limit_function_calls_to = 0)
+    msg, history = duck_comms_agent.send_message("say to the duck message: I am hungry")
 except TooManyFunctionCallsException as e:
     print(e)
     print(e.call_history)

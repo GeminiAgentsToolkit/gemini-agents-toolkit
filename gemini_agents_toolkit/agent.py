@@ -26,7 +26,6 @@ def log_retry_error(retry_state):
     print(f"Retrying {retry_state.fn.__name__}... Attempt #{retry_state.attempt_number}, "
         f"Last error: {retry_state.outcome.exception()}")
 
-
 # pylint: disable-next=too-many-instance-attributes
 class GeminiAgent:
     """An agent to request LLM for executing users instructions with tools (custom functions) provided by user"""
@@ -37,6 +36,7 @@ class GeminiAgent:
             model_name=DEFAULT_MODEL,
             *,
             functions=None,
+            function_call_limit_per_chat=None,
             system_instruction=None,
             delegation_function_prompt=None,
             delegates=None,
@@ -73,6 +73,7 @@ class GeminiAgent:
                                       generation_config=generation_config)
         self.chat = self._model.start_chat()
         self.debug = debug
+        self.function_call_limit_per_chat = function_call_limit_per_chat if function_call_limit_per_chat is not None else 10
         self._delegation_prompt_set = False
         self.on_message = on_message
         self.delegation_function_prompt = delegation_function_prompt
@@ -153,7 +154,7 @@ class GeminiAgent:
         updates_tokens_count[response._raw_response.model_version] = current_count
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=2, min=2, max=16), after=log_retry_error)
-    def send_message(self, msg: str, *, generation_config: GenerationConfig = None, history = None, limit_function_calls_to = 10) -> tuple[str, list]:
+    def send_message(self, msg: str, *, generation_config: GenerationConfig = None, history = None) -> tuple[str, list]:
         """Initiate communication with LLM to execute user's instructions"""
         initial_history_len = 0
         if history:
@@ -171,6 +172,13 @@ class GeminiAgent:
 
         # Process any function calls until there are no more function calls in the response
         while response.candidates[0].function_calls:
+            function_call_counter = function_call_counter + 1
+            if function_call_counter >= self.function_call_limit_per_chat:
+                raise TooManyFunctionCallsException(
+                    f"Exceed allowed number of function calls: {self.function_call_limit_per_chat}", 
+                    self.chat._history[initial_history_len:]
+                )
+
             self._updated_tokens_count(updates_tokens_count, response)
             if self.debug:
                 print(f"function call found: {response.candidates[0].function_calls[0]}")
@@ -189,10 +197,6 @@ class GeminiAgent:
                 ),
                 generation_config=generation_config
             )
-
-            function_call_counter = function_call_counter + 1
-            if function_call_counter >= limit_function_calls_to:
-                raise TooManyFunctionCallsException(f"Exceed allowed number of function calls: {limit_function_calls_to}", self.chat._history[initial_history_len:])
 
         if self.on_message is not None:
             self.on_message(response.text)
@@ -262,6 +266,7 @@ def create_agent_from_functions_list(
         *,
         model_name=DEFAULT_MODEL,
         functions=None,
+        function_call_limit_per_chat=None,
         system_instruction=None,
         debug=False,
         add_scheduling_functions=False,
@@ -309,6 +314,7 @@ def create_agent_from_functions_list(
         delegates=delegates,
         on_message=on_message,
         functions=functions,
+        function_call_limit_per_chat=function_call_limit_per_chat,
         model_name=model_name,
         system_instruction=system_instruction,
         debug=debug,
