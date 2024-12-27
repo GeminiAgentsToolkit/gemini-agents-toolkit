@@ -129,13 +129,8 @@ class Pipeline(object):
         prompt = f"""this is one step in the pipeline, this steps are user command but not coming directly from the user:
         user prompt: {prompt}"""
         agent_to_use = self._get_agent(agent)
-        try: 
-            result, updated_history = agent_to_use.send_message(prompt, history=history)
-            self._full_history.extend(updated_history)
-        except TooManyFunctionCallsException as e:
-            if debug_mode: 
-                print(e)
-                print(e.call_history)
+        result, updated_history = agent_to_use.send_message(prompt, history=history)
+        self._full_history.extend(updated_history)
 
         self._full_history.extend(updated_history)    
 
