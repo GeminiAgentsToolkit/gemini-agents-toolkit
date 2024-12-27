@@ -13,14 +13,18 @@ from vertexai.generative_models import (
 )
 from config import (DEFAULT_MODEL)
 from gemini_agents_toolkit import scheduler
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_not_exception_type
+
+class TooManyFunctionCallsException(Exception):
+    def __init__(self,message,call_history:list):
+        super().__init__(message)
+        self.call_history = call_history
 
 
 def log_retry_error(retry_state):
     """Logs the retry attempt details including the error message."""
     print(f"Retrying {retry_state.fn.__name__}... Attempt #{retry_state.attempt_number}, "
         f"Last error: {retry_state.outcome.exception()}")
-
 
 # pylint: disable-next=too-many-instance-attributes
 class GeminiAgent:
@@ -32,6 +36,7 @@ class GeminiAgent:
             model_name=DEFAULT_MODEL,
             *,
             functions=None,
+            function_call_limit_per_chat=None,
             system_instruction=None,
             delegation_function_prompt=None,
             delegates=None,
@@ -68,6 +73,7 @@ class GeminiAgent:
                                       generation_config=generation_config)
         self.chat = self._model.start_chat()
         self.debug = debug
+        self.function_call_limit_per_chat = function_call_limit_per_chat if function_call_limit_per_chat is not None else 10
         self._delegation_prompt_set = False
         self.on_message = on_message
         self.delegation_function_prompt = delegation_function_prompt
@@ -147,7 +153,7 @@ class GeminiAgent:
         current_count += response.usage_metadata.total_token_count
         updates_tokens_count[response._raw_response.model_version] = current_count
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=2, min=2, max=16), after=log_retry_error)
+    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=2, min=2, max=16), after=log_retry_error, retry=retry_if_not_exception_type(TooManyFunctionCallsException))
     def send_message(self, msg: str, *, generation_config: GenerationConfig = None, history = None) -> tuple[str, list]:
         """Initiate communication with LLM to execute user's instructions"""
         initial_history_len = 0
@@ -162,8 +168,17 @@ class GeminiAgent:
         if self.debug:
             print(f"msg: '{msg}' is out")
 
+        function_call_counter = 0
+
         # Process any function calls until there are no more function calls in the response
         while response.candidates[0].function_calls:
+            function_call_counter = function_call_counter + 1
+            if function_call_counter >= self.function_call_limit_per_chat:
+                raise TooManyFunctionCallsException(
+                    f"Exceed allowed number of function calls: {self.function_call_limit_per_chat}", 
+                    self.chat._history[initial_history_len:]
+                )
+
             self._updated_tokens_count(updates_tokens_count, response)
             if self.debug:
                 print(f"function call found: {response.candidates[0].function_calls[0]}")
@@ -251,6 +266,7 @@ def create_agent_from_functions_list(
         *,
         model_name=DEFAULT_MODEL,
         functions=None,
+        function_call_limit_per_chat=None,
         system_instruction=None,
         debug=False,
         add_scheduling_functions=False,
@@ -298,6 +314,7 @@ def create_agent_from_functions_list(
         delegates=delegates,
         on_message=on_message,
         functions=functions,
+        function_call_limit_per_chat=function_call_limit_per_chat,
         model_name=model_name,
         system_instruction=system_instruction,
         debug=debug,

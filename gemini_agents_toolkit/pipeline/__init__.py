@@ -1,6 +1,7 @@
 from vertexai.generative_models import GenerationConfig
 from gemini_agents_toolkit.history_utils import summarize, print_history, calculate_total_tokens_used_per_model
 from gemini_agents_toolkit import agent as agent_toolkit
+from gemini_agents_toolkit.agent import TooManyFunctionCallsException
 from config import (SIMPLE_MODEL)
 
 
@@ -128,8 +129,15 @@ class Pipeline(object):
         prompt = f"""this is one step in the pipeline, this steps are user command but not coming directly from the user:
         user prompt: {prompt}"""
         agent_to_use = self._get_agent(agent)
-        result, updated_history = agent_to_use.send_message(prompt, history=history)
-        self._full_history.extend(updated_history)
+        try: 
+            result, updated_history = agent_to_use.send_message(prompt, history=history)
+            self._full_history.extend(updated_history)
+        except TooManyFunctionCallsException as e:
+            if debug_mode: 
+                print(e)
+                print(e.call_history)
+
+        self._full_history.extend(updated_history)    
 
         if debug_mode:
             print(f"###### => response from agent: {result}")
