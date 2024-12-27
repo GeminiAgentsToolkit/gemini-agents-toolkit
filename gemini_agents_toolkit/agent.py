@@ -13,7 +13,7 @@ from vertexai.generative_models import (
 )
 from config import (DEFAULT_MODEL)
 from gemini_agents_toolkit import scheduler
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_not_exception_type
 
 class TooManyFunctionCallsException(Exception):
     def __init__(self,message,call_history:list):
