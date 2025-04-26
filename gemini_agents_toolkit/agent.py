@@ -1,9 +1,10 @@
-"""An agent for executing user's instructions"""
+"""An agent for executing user's instructions with streaming support"""
 
 import logging
 import inspect
 import traceback
 import re
+from typing import Generator, Dict, Any, Union, List, Tuple
 from vertexai.generative_models import (
     FunctionDeclaration,
     Tool,
@@ -11,52 +12,49 @@ from vertexai.generative_models import (
     Part,
     GenerativeModel
 )
-from config import (DEFAULT_MODEL)
+from config import DEFAULT_MODEL
 from gemini_agents_toolkit import scheduler
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_not_exception_type
 
 class TooManyFunctionCallsException(Exception):
-    def __init__(self,message,call_history:list):
+    def __init__(self, message: str, call_history: list):
         super().__init__(message)
         self.call_history = call_history
-
 
 def log_retry_error(retry_state):
     """Logs the retry attempt details including the error message."""
     print(f"Retrying {retry_state.fn.__name__}... Attempt #{retry_state.attempt_number}, "
-        f"Last error: {retry_state.outcome.exception()}")
+          f"Last error: {retry_state.outcome.exception()}")
 
-# pylint: disable-next=too-many-instance-attributes
 class GeminiAgent:
     """An agent to request LLM for executing users instructions with tools (custom functions) provided by user"""
 
-    # pylint: disable-next=too-many-instance-attributes, too-many-arguments, too-many-locals
     def __init__(
             self,
-            model_name=DEFAULT_MODEL,
+            model_name: str = DEFAULT_MODEL,
             *,
-            functions=None,
-            function_call_limit_per_chat=None,
-            system_instruction=None,
-            delegation_function_prompt=None,
-            delegates=None,
-            debug=False,
-            on_message=None,
+            functions: List[callable] = None,
+            function_call_limit_per_chat: int = None,
+            system_instruction: str = None,
+            delegation_function_prompt: str = None,
+            delegates: List['GeminiAgent'] = None,
+            debug: bool = False,
+            on_message: callable = None,
             generation_config: GenerationConfig = None
     ):
-        if not functions:
+        if functions is None:
             functions = []
         self.history = []
         self.functions = {func.__name__: func for func in functions}
         func_declarations = [_generate_function_declaration(func) for func in functions]
+        
         if delegates is not None:
             for i, delegate in enumerate(delegates):
                 if not isinstance(delegate, GeminiAgent):
-                    raise ValueError("delegates must be a list of GeminiAgent instances")
+                    raise ValueError("Delegates must be a list of GeminiAgent instances")
                 if not delegate.delegation_function_prompt:
-                    raise ValueError("all delegates must have a delegation prompt specified set")
+                    raise ValueError("All delegates must have a delegation prompt specified")
 
-                # Get the signature of the original send_message method
                 tool_name = f"delegate_{i}_send_message"
                 self.functions[tool_name] = delegate.send_message
                 func_declarations.append(
@@ -64,38 +62,178 @@ class GeminiAgent:
                         delegate.send_message,
                         user_set_name=tool_name,
                         user_set_description=delegate.delegation_function_prompt))
-        tools = None
-        if func_declarations:
-            tools = [Tool(function_declarations=func_declarations)]
-        self._model = GenerativeModel(model_name=model_name,
-                                      tools=tools,
-                                      system_instruction=system_instruction,
-                                      generation_config=generation_config)
+
+        tools = [Tool(function_declarations=func_declarations)] if func_declarations else None
+        self._model = GenerativeModel(
+            model_name=model_name,
+            tools=tools,
+            system_instruction=system_instruction,
+            generation_config=generation_config
+        )
         self.chat = self._model.start_chat()
         self.debug = debug
         self.function_call_limit_per_chat = function_call_limit_per_chat
-        self._delegation_prompt_set = False
         self.on_message = on_message
-        self.delegation_function_prompt = delegation_function_prompt
-        if delegation_function_prompt is not None:
-            delegation_function_prompt = f"""
+        self.delegation_function_prompt = self._format_delegation_prompt(delegation_function_prompt)
+
+    def _format_delegation_prompt(self, prompt: str) -> str:
+        """Formats the delegation prompt if provided."""
+        if prompt is not None:
+            return f"""
             Use this function to delegate task to the agent (your coworker). 
             For delegate pass natural language command to the agent via this method.
-            Here is what this agent can be delegate to do: {delegation_function_prompt}
+            Here is what this agent can be delegate to do: {prompt}
 
             Keep in mind that the agent does not have full context of the conversation,
-             you have to construct the command in a way that agent can understand
-             and execute the task.
+            you have to construct the command in a way that agent can understand
+            and execute the task.
             The agent will treat the message you send as if it comes from user
-             and will respond to it as if it is a user message. In this case you are the user,
-             and you need to ask it to do something, be clear and concise."""
-            self.delegation_function_prompt = delegation_function_prompt
-    
-    def get_history(self):
-        # clone chat history and return a new list
+            and will respond to it as if it is a user message."""
+        return None
+
+    def stream_response(
+        self,
+        prompt: str,
+        *,
+        generation_config: GenerationConfig = None,
+        history: List[Dict] = None,
+        **kwargs
+    ) -> Generator[Dict[str, Any], None, None]:
+        """Stream responses chunk-by-chunk while maintaining all agent functionality."""
+        if history:
+            self.set_history(history)
+
+        try:
+            response = self._model.generate_content(
+                prompt,
+                stream=True,
+                generation_config=generation_config,
+                **kwargs
+            )
+
+            function_call_counter = 0
+            for chunk in response:
+                if chunk.candidates and chunk.candidates[0].function_calls:
+                    function_call = chunk.candidates[0].function_calls[0]
+                    function_call_counter += 1
+
+                    if (self.function_call_limit_per_chat is not None and 
+                        function_call_counter > self.function_call_limit_per_chat):
+                        raise TooManyFunctionCallsException(
+                            f"Exceeded function call limit: {self.function_call_limit_per_chat}",
+                            self.chat.history
+                        )
+
+                    yield {
+                        "content": "",
+                        "is_complete": False,
+                        "function_call": {
+                            "name": function_call.name,
+                            "args": function_call.args
+                        }
+                    }
+
+                    api_response = self._call_function(function_call)
+
+                    continuation = self._model.generate_content(
+                        Part.from_function_response(
+                            name=function_call.name,
+                            response={"content": str(api_response)},
+                        ),
+                        generation_config=generation_config,
+                        stream=True
+                    )
+
+                    for cont_chunk in continuation:
+                        if cont_chunk.text:
+                            yield {
+                                "content": cont_chunk.text,
+                                "is_complete": False,
+                                "function_call": None
+                            }
+                    break
+
+                if chunk.text:
+                    yield {
+                        "content": chunk.text,
+                        "is_complete": False,
+                        "function_call": None
+                    }
+
+            yield {
+                "content": "",
+                "is_complete": True,
+                "function_call": None
+            }
+
+        except Exception as e:
+            logging.error(f"Streaming error: {str(e)}")
+            yield {
+                "content": f"[AGENT ERROR] {str(e)}",
+                "is_complete": True,
+                "error": True
+            }
+
+    @retry(stop=stop_after_attempt(5), 
+           wait=wait_exponential(multiplier=2, min=2, max=16), 
+           after=log_retry_error, 
+           retry=retry_if_not_exception_type(TooManyFunctionCallsException))
+    def send_message(
+        self,
+        msg: str,
+        *,
+        generation_config: GenerationConfig = None,
+        history: List[Dict] = None,
+        stream: bool = False
+    ) -> Union[Tuple[str, List[Dict]], Generator[Dict[str, Any], None, None]]:
+        """Unified interface supporting both streaming and non-streaming."""
+        if stream:
+            return self.stream_response(msg, generation_config=generation_config, history=history)
+        
+        initial_history_len = 0
+        if history:
+            self.set_history(history)
+            initial_history_len = len(history)
+
+        response = self.chat.send_message(msg, generation_config=generation_config)
+        function_call_counter = 0
+
+        while response.candidates[0].function_calls:
+            function_call_counter += 1
+            if (self.function_call_limit_per_chat is not None and 
+                function_call_counter > self.function_call_limit_per_chat):
+                raise TooManyFunctionCallsException(
+                    f"Exceeded function call limit: {self.function_call_limit_per_chat}",
+                    self.chat.history
+                )
+
+            function_call = response.candidates[0].function_calls[0]
+            api_response = self._call_function(function_call)
+
+            response = self.chat.send_message(
+                Part.from_function_response(
+                    name=function_call.name,
+                    response={"content": str(api_response)},
+                ),
+                generation_config=generation_config
+            )
+
+        if self.on_message is not None:
+            self.on_message(response.text)
+
+        try:
+            response_text = response.candidates[0].text
+        except Exception as e:
+            response_text = f"Error: {str(e)}"
+
+        return response_text, self.chat.history[initial_history_len:]
+
+    def get_history(self) -> List[Dict]:
+        """Returns a copy of the chat history."""
         return self.history.copy()
     
-    def set_history(self, history):
+    def set_history(self, history: List[Dict]) -> None:
+        """Sets the chat history."""
         new_history = []
         for message in history:
             new_history.append(message)
@@ -116,111 +254,41 @@ class GeminiAgent:
         self.chat._history = raw_history
         self.history = new_history
 
-    def _call_function(self, function_call):
+    def _call_function(self, function_call) -> Dict:
+        """Executes a function call and returns the result."""
         if self.debug:
             print("call function initiated")
             print(str(function_call))
-        # Find the function by name in self.functions
         func = self.functions.get(function_call.name)
         if func:
             try:
-                # Extract the arguments from the function call
-                args = function_call.args
-                # Call the function with the extracted arguments
-                return func(**args)
+                return func(**function_call.args)
             except TypeError as e:
                 stack_trace = traceback.format_exc()
-                logging.error(
-                    f"Invalid arguments for function {function_call.name}: {e}\n{stack_trace}")
+                logging.error(f"Invalid arguments for function {function_call.name}: {e}\n{stack_trace}")
                 return {"error": f"Invalid arguments for function {function_call.name}: {e}\n{stack_trace}"}
             except ValueError as e:
                 stack_trace = traceback.format_exc()
-                logging.error(f"Value error during function call  {function_call.name}: {e}\n{stack_trace}")
+                logging.error(f"Value error during function call {function_call.name}: {e}\n{stack_trace}")
                 return {"error": f"Value error during function call {function_call.name}: {e}\n{stack_trace}"}
-            # pylint: disable-next=broad-exception-caught
             except Exception as e:
                 stack_trace = traceback.format_exc()
                 logging.error(f"Unexpected error during function call {function_call.name}: {e}\n{stack_trace}")
                 return {"error": f"Unexpected error during function call {function_call.name}: {e}\n{stack_trace}"}
-        else:
-            return {"error": "Function not found"}
+        return {"error": "Function not found"}
 
-    def _recreate_client(self):
+    def _recreate_client(self) -> None:
+        """Recreates the chat client."""
         self.chat = self._model.start_chat()
 
-    def _updated_tokens_count(self, updates_tokens_count, response):
+    def _updated_tokens_count(self, updates_tokens_count: Dict, response) -> None:
+        """Updates the token count dictionary."""
         current_count = updates_tokens_count.get(response._raw_response.model_version, 0)
         current_count += response.usage_metadata.total_token_count
         updates_tokens_count[response._raw_response.model_version] = current_count
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=2, min=2, max=16), after=log_retry_error, retry=retry_if_not_exception_type(TooManyFunctionCallsException))
-    def send_message(self, msg: str, *, generation_config: GenerationConfig = None, history = None) -> tuple[str, list]:
-        """Initiate communication with LLM to execute user's instructions"""
-        initial_history_len = 0
-        if history:
-            self.set_history(history)
-            initial_history_len = len(history)
-        updates_tokens_count = {}
-        
-        if self.debug:
-            print(f"about to send msg: {msg}")
-        response = self.chat.send_message(msg)
-        if self.debug:
-            print(f"msg: '{msg}' is out")
-
-        function_call_counter = 0
-
-        # Process any function calls until there are no more function calls in the response
-        while response.candidates[0].function_calls:
-            function_call_counter = function_call_counter + 1
-            if self.function_call_limit_per_chat is not None and function_call_counter >= self.function_call_limit_per_chat:
-                raise TooManyFunctionCallsException(
-                    f"Exceed allowed number of function calls: {self.function_call_limit_per_chat}", 
-                    self.chat._history[initial_history_len:]
-                )
-
-            self._updated_tokens_count(updates_tokens_count, response)
-            if self.debug:
-                print(f"function call found: {response.candidates[0].function_calls[0]}")
-            function_call = response.candidates[0].function_calls[0]
-            api_response = self._call_function(function_call)
-            if self.debug:
-                print(f"api response: {api_response}")
-
-            # Return the API response to Gemini
-            response = self.chat.send_message(
-                Part.from_function_response(
-                    name=function_call.name,
-                    response={
-                        "content": str(api_response),
-                    },
-                ),
-                generation_config=generation_config
-            )
-
-        if self.on_message is not None:
-            self.on_message(response.text)
-        # Extract the text from the final model response
-        response_text = "DONE"
-        self._updated_tokens_count(updates_tokens_count, response)
-        try:
-            response_text = response.candidates[0].text
-        except Exception as e:
-            print(f"Error: {str(e)}")
-
-        history_delta = self.chat._history[initial_history_len:]
-        for raw_history_item in history_delta:
-            history_item = {
-                "raw": raw_history_item,
-                "tokens_used": {},
-            }
-            self.history.append(history_item)
-        self.history[-1]["tokens_used"] = updates_tokens_count
-        self._recreate_client()
-        return response_text, self.history[initial_history_len:]
-
-# pylint: disable-next=too-many-locals
 def _generate_function_declaration(func, *, user_set_name=None, user_set_description=None):
+    """Generate a FunctionDeclaration from a Python function."""
     func_name = user_set_name or func.__name__
     func_doc = user_set_description or (func.__doc__ or "")
 
@@ -230,7 +298,6 @@ def _generate_function_declaration(func, *, user_set_name=None, user_set_descrip
         "properties": {}
     }
 
-    # Parse parameter descriptions from docstring using regex
     param_descriptions = {}
     if func_doc:
         param_pattern = re.compile(r":param\s+(\w+):\s*(.*)")
@@ -243,7 +310,7 @@ def _generate_function_declaration(func, *, user_set_name=None, user_set_descrip
             int: "integer",
             float: "number",
             str: "string",
-            # Add more mappings as needed
+            bool: "boolean"
         }
         param_type = type_mapping.get(param.annotation, "string")
 
@@ -252,63 +319,59 @@ def _generate_function_declaration(func, *, user_set_name=None, user_set_descrip
             "description": param_descriptions.get(name, "No description provided")
         }
 
-    function_declaration = FunctionDeclaration(
+    return FunctionDeclaration(
         name=func_name,
         description=func_doc,
         parameters=params
     )
 
-    return function_declaration
-
-
-# pylint: disable-next=too-many-arguments
 def create_agent_from_functions_list(
         *,
-        model_name=DEFAULT_MODEL,
-        functions=None,
-        function_call_limit_per_chat=None,
-        system_instruction=None,
-        debug=False,
-        add_scheduling_functions=False,
-        gcs_bucket=None,
-        gcs_blob=None,
-        delegation_function_prompt=None,
-        delegates=None,
-        on_message=None,
-        generation_config=None
-):
-    """Create an agent with custom functions and other parameters received from user"""
+        model_name: str = DEFAULT_MODEL,
+        functions: List[callable] = None,
+        function_call_limit_per_chat: int = None,
+        system_instruction: str = None,
+        debug: bool = False,
+        add_scheduling_functions: bool = False,
+        gcs_bucket: str = None,
+        gcs_blob: str = None,
+        delegation_function_prompt: str = None,
+        delegates: List[GeminiAgent] = None,
+        on_message: callable = None,
+        generation_config: GenerationConfig = None
+) -> GeminiAgent:
+    """Create an agent with custom functions and other parameters."""
     if functions is None:
         functions = []
     if (not gcs_bucket and gcs_blob) or (gcs_bucket and not gcs_blob):
         raise ValueError("Both gcs_bucket and gcs_blob must be provided")
+
     if add_scheduling_functions:
-        scheduler_instance = scheduler.ScheduledTaskExecutor(debug=debug, gcs_bucket=gcs_bucket, gcs_blob=gcs_blob)
+        scheduler_instance = scheduler.ScheduledTaskExecutor(
+            debug=debug, 
+            gcs_bucket=gcs_bucket, 
+            gcs_blob=gcs_blob
+        )
         functions.extend([
             scheduler_instance.add_task,
             scheduler_instance.get_all_jobs,
             scheduler_instance.delete_job,
         ])
+
     if add_scheduling_functions and not on_message:
-        # print warning
         logging.warning("on_message is not set, you may not see the results of the scheduled tasks")
-    if debug:
-        print(f"all_functions: {functions}")
-    # Hack to fix: https://github.com/googleapis/python-aiplatform/issues/4472
-    if functions and len(functions) > 0:
+
+    if functions:
         system_instruction = system_instruction or ""
         system_instruction = f"""{system_instruction}\n\n# IMPORTANT
             You are an agent with the ability to call a set of actions (functions). Follow these rules strictly:
 
-            * You must only call one method at a time. Do not attempt to call multiple methods or functions in a single execution.
-            * You can call a method, get the response, and then call another method. Each method must be executed individually.
-            * You are not allowed to execute arbitrary Python code. Your only task is to call the available methods or tools.
-            * You cannot evaluate any expressions as input arguments to the function.
-                 * Example of incorrect usage: print(12 > 24) – Incorrect (this evaluates an expression).
-                 * Example of correct usage: print(False) – Correct, provided the print method accepts a boolean as input.
+            * You must only call one method at a time.
+            * You cannot evaluate expressions as input arguments.
+            * You are not allowed to execute arbitrary Python code.
             
-            If you attempt to execute code or evaluate expressions that are not allowed, your action will fail, and you must correct it.
-             Ensure that you strictly follow these instructions."""
+            Ensure that you strictly follow these instructions."""
+
     agent = GeminiAgent(
         delegation_function_prompt=delegation_function_prompt,
         delegates=delegates,
@@ -318,8 +381,11 @@ def create_agent_from_functions_list(
         model_name=model_name,
         system_instruction=system_instruction,
         debug=debug,
-        generation_config=generation_config)
+        generation_config=generation_config
+    )
+
     if add_scheduling_functions:
         scheduler_instance.set_gemini_agent(agent)
         scheduler_instance.start_scheduler()
+
     return agent
