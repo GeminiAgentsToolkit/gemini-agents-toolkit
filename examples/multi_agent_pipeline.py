@@ -70,6 +70,9 @@ You are agent that can read/write data from the FS.
 """
 vertexai.init(project=PROJECT_ID, location=REGION)
 
+duck_comms_agent = agent.ADKAgenService(
+    agent=LlmAgent(model=DEFAULT_MODEL, name="test_agent", tools=all_functions, instructions=FS_AGENT_SYSTEM_INSTRUCTION))
+
 fs_agent = agent.create_agent_from_functions_list(functions=all_functions, model_name=DEFAULT_MODEL,
                                                   system_instruction=FS_AGENT_SYSTEM_INSTRUCTION)
 json_agent = create_json_agent(model_name=DEFAULT_MODEL)

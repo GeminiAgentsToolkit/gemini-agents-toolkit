@@ -1,10 +1,10 @@
 """This example illustrates creating an advanced pipeline with different step types."""
 
 import random
-import vertexai
-from config import (PROJECT_ID, REGION, DEFAULT_MODEL, SIMPLE_MODEL)
+from gemini_agents_toolkit.config import DEFAULT_MODEL
 from gemini_agents_toolkit import agent
 from gemini_agents_toolkit.pipeline import Pipeline
+from google.adk.agents import LlmAgent
 
 # pylint: disable-next=invalid-name
 current_limit_buy_price = None
@@ -80,8 +80,6 @@ def check_how_many_shares_i_own():
     return 30 + random.randint(-5, 5)
 
 
-vertexai.init(project=PROJECT_ID, location=REGION)
-
 all_functions = [
     check_if_limit_sell_order_exists,
     cancel_limit_sell_order,
@@ -93,8 +91,8 @@ all_functions = [
     set_limit_buy_order,
     check_how_many_shares_i_own
 ]
-investor_agent = agent.create_agent_from_functions_list(functions=all_functions,
-                                                        model_name=DEFAULT_MODEL)
+investor_agent = agent.ADKAgenService(
+    agent=LlmAgent(model=DEFAULT_MODEL, name="investing_agent", tools=all_functions))
 
 pipeline = Pipeline(default_agent=investor_agent, use_convert_agent_helper=True)
 _, history_with_price = pipeline.step("check current price of TQQQ")
@@ -103,7 +101,7 @@ if pipeline.boolean_step("do I own more than 30 shares of TQQQ")[0]:
                     then_steps=[
                         "set limit sell order for TQQQ for price +4% of current price",
                     ],
-                    history=history_with_price)
+                    events=history_with_price)
 else:
     if pipeline.boolean_step("is there a limit buy order exists already?")[0]:
         pipeline.if_step(
@@ -112,10 +110,10 @@ else:
                 "cancel limit buy order for TQQQ",
                 "set limit buy order for TQQQ for price 3 percent below the current price"
             ],
-            history=history_with_price)
+            events=history_with_price)
     else:
         pipeline.step(
             "set limit buy order for TQQQ for price 3 percent below the current price.", 
-            history=history_with_price)
+            events=history_with_price)
 summary, _ = pipeline.summarize_full_history()
 print(summary)

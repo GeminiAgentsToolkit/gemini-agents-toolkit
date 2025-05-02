@@ -1,24 +1,22 @@
 """An agent for executing user's instructions"""
 
 import logging
-import inspect
-import traceback
-import re
-from vertexai.generative_models import (
-    FunctionDeclaration,
-    Tool,
-    GenerationConfig,
-    Part,
-    GenerativeModel
-)
-from config import (DEFAULT_MODEL)
-from gemini_agents_toolkit import scheduler
+import uuid 
+
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_not_exception_type
 
+from google.adk.sessions import InMemorySessionService
+from google.adk.sessions.base_session_service import GetSessionConfig
+from google.adk.runners import Runner
+
+from google.genai import types as genai_types
+
+import threading
+
+
 class TooManyFunctionCallsException(Exception):
-    def __init__(self,message,call_history:list):
+    def __init__(self,message):
         super().__init__(message)
-        self.call_history = call_history
 
 
 def log_retry_error(retry_state):
@@ -26,300 +24,121 @@ def log_retry_error(retry_state):
     print(f"Retrying {retry_state.fn.__name__}... Attempt #{retry_state.attempt_number}, "
         f"Last error: {retry_state.outcome.exception()}")
 
+
 # pylint: disable-next=too-many-instance-attributes
-class GeminiAgent:
+class ADKAgenService:
     """An agent to request LLM for executing users instructions with tools (custom functions) provided by user"""
 
     # pylint: disable-next=too-many-instance-attributes, too-many-arguments, too-many-locals
     def __init__(
             self,
-            model_name=DEFAULT_MODEL,
+            agent,
             *,
-            functions=None,
             function_call_limit_per_chat=None,
-            system_instruction=None,
-            delegation_function_prompt=None,
-            delegates=None,
             debug=False,
             on_message=None,
-            generation_config: GenerationConfig = None
+            session_service=None,
+            app_name="adk_service",
+            events_per_session=-1
     ):
-        if not functions:
-            functions = []
-        self.history = []
-        self.functions = {func.__name__: func for func in functions}
-        func_declarations = [_generate_function_declaration(func) for func in functions]
-        if delegates is not None:
-            for i, delegate in enumerate(delegates):
-                if not isinstance(delegate, GeminiAgent):
-                    raise ValueError("delegates must be a list of GeminiAgent instances")
-                if not delegate.delegation_function_prompt:
-                    raise ValueError("all delegates must have a delegation prompt specified set")
-
-                # Get the signature of the original send_message method
-                tool_name = f"delegate_{i}_send_message"
-                self.functions[tool_name] = delegate.send_message
-                func_declarations.append(
-                    _generate_function_declaration(
-                        delegate.send_message,
-                        user_set_name=tool_name,
-                        user_set_description=delegate.delegation_function_prompt))
-        tools = None
-        if func_declarations:
-            tools = [Tool(function_declarations=func_declarations)]
-        self._model = GenerativeModel(model_name=model_name,
-                                      tools=tools,
-                                      system_instruction=system_instruction,
-                                      generation_config=generation_config)
-        self.chat = self._model.start_chat()
-        self.debug = debug
+        self.agent = agent
         self.function_call_limit_per_chat = function_call_limit_per_chat
-        self._delegation_prompt_set = False
+        self.debug = debug
         self.on_message = on_message
-        self.delegation_function_prompt = delegation_function_prompt
-        if delegation_function_prompt is not None:
-            delegation_function_prompt = f"""
-            Use this function to delegate task to the agent (your coworker). 
-            For delegate pass natural language command to the agent via this method.
-            Here is what this agent can be delegate to do: {delegation_function_prompt}
+        self.session_service = session_service if session_service else InMemorySessionService()
+        self.runners = {}
+        self.app_name = app_name
+        # Lock for thread-safe access to runners dictionary during creation
+        self.runner_lock = threading.Lock()
+        self.events_per_session = events_per_session
 
-            Keep in mind that the agent does not have full context of the conversation,
-             you have to construct the command in a way that agent can understand
-             and execute the task.
-            The agent will treat the message you send as if it comes from user
-             and will respond to it as if it is a user message. In this case you are the user,
-             and you need to ask it to do something, be clear and concise."""
-            self.delegation_function_prompt = delegation_function_prompt
-    
-    def get_history(self):
-        # clone chat history and return a new list
-        return self.history.copy()
-    
-    def set_history(self, history):
-        new_history = []
-        for message in history:
-            new_history.append(message)
-            new_parts = []
-            for part in message["raw"].parts:
-                if hasattr(part, "text"):
-                    new_parts.append(part)
-                if hasattr(part, "function_call"):
-                    func_name = part.function_call.name
-                    if func_name in self.functions:
-                        new_parts.append(part)
-                if hasattr(part, "function_response"):
-                    func_name = part.function_response.name
-                    if func_name in self.functions:
-                        new_parts.append(part)
-            message["raw"]._parts = new_parts
-        raw_history = [message["raw"] for message in history]
-        self.chat._history = raw_history
-        self.history = new_history
-
-    def _call_function(self, function_call):
-        if self.debug:
-            print("call function initiated")
-            print(str(function_call))
-        # Find the function by name in self.functions
-        func = self.functions.get(function_call.name)
-        if func:
-            try:
-                # Extract the arguments from the function call
-                args = function_call.args
-                # Call the function with the extracted arguments
-                return func(**args)
-            except TypeError as e:
-                stack_trace = traceback.format_exc()
-                logging.error(
-                    f"Invalid arguments for function {function_call.name}: {e}\n{stack_trace}")
-                return {"error": f"Invalid arguments for function {function_call.name}: {e}\n{stack_trace}"}
-            except ValueError as e:
-                stack_trace = traceback.format_exc()
-                logging.error(f"Value error during function call  {function_call.name}: {e}\n{stack_trace}")
-                return {"error": f"Value error during function call {function_call.name}: {e}\n{stack_trace}"}
-            # pylint: disable-next=broad-exception-caught
-            except Exception as e:
-                stack_trace = traceback.format_exc()
-                logging.error(f"Unexpected error during function call {function_call.name}: {e}\n{stack_trace}")
-                return {"error": f"Unexpected error during function call {function_call.name}: {e}\n{stack_trace}"}
-        else:
-            return {"error": "Function not found"}
-
-    def _recreate_client(self):
-        self.chat = self._model.start_chat()
-
-    def _updated_tokens_count(self, updates_tokens_count, response):
-        current_count = updates_tokens_count.get(response._raw_response.model_version, 0)
-        current_count += response.usage_metadata.total_token_count
-        updates_tokens_count[response._raw_response.model_version] = current_count
+    def _maybe_create_chat_session(self, *, user_id, session_id, num_recent_events, events=[]):
+        get_config = None
+        if num_recent_events > 0:
+            get_config = GetSessionConfig(num_recent_events=num_recent_events)
+        chat_session = self.session_service.get_session(
+            app_name=self.app_name,
+            user_id=user_id,
+            session_id=session_id,
+            config=get_config)
+        if not chat_session:
+            chat_session = self.session_service.create_session(
+                app_name=self.app_name,
+                user_id=user_id,
+                session_id=session_id)
+        if events:
+            for event in events:
+                self.session_service.append_event(session=chat_session, event=event)
+        return chat_session
 
     @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=2, min=2, max=16), after=log_retry_error, retry=retry_if_not_exception_type(TooManyFunctionCallsException))
-    def send_message(self, msg: str, *, generation_config: GenerationConfig = None, history = None) -> tuple[str, list]:
+    def send_message(self, msg: str, *, user_id="default_user", session_id=None, events=[]) -> tuple[str, list]:
         """Initiate communication with LLM to execute user's instructions"""
-        initial_history_len = 0
-        if history:
-            self.set_history(history)
-            initial_history_len = len(history)
-        updates_tokens_count = {}
+        if events and session_id:
+            raise ValueError()
+        if not session_id:
+            session_id = str(uuid.uuid4())
+        session = self._maybe_create_chat_session(user_id=user_id, session_id=session_id, num_recent_events=self.events_per_session, events=events)
         
         if self.debug:
             print(f"about to send msg: {msg}")
-        response = self.chat.send_message(msg)
-        if self.debug:
-            print(f"msg: '{msg}' is out")
+        
+        runner_id = user_id + session_id
+        runner_instance = self.runners.get(runner_id)
+        if not runner_instance:
+            with self.runner_lock:
+                runner_instance = self.runners.get(runner_id) # Double-check
+                if not runner_instance:
+                    try:
+                        runner_instance = Runner(
+                            agent=self.agent,
+                            app_name=self.app_name,
+                            session_service=self.session_service
+                        )
+                        self.runners[runner_id] = runner_instance
+                    except Exception as e:
+                        logging.exception(f"Fatal Error creating agent/runner for space {session_id}: {e}") # Use exception for traceback
 
+        user_content = genai_types.Content(role='user', parts=[genai_types.Part(text=msg)])
+        final_response_text = ""
         function_call_counter = 0
 
-        # Process any function calls until there are no more function calls in the response
-        while response.candidates[0].function_calls:
-            function_call_counter = function_call_counter + 1
-            if self.function_call_limit_per_chat is not None and function_call_counter >= self.function_call_limit_per_chat:
-                raise TooManyFunctionCallsException(
-                    f"Exceed allowed number of function calls: {self.function_call_limit_per_chat}", 
-                    self.chat._history[initial_history_len:]
-                )
-
-            self._updated_tokens_count(updates_tokens_count, response)
-            if self.debug:
-                print(f"function call found: {response.candidates[0].function_calls[0]}")
-            function_call = response.candidates[0].function_calls[0]
-            api_response = self._call_function(function_call)
-            if self.debug:
-                print(f"api response: {api_response}")
-
-            # Return the API response to Gemini
-            response = self.chat.send_message(
-                Part.from_function_response(
-                    name=function_call.name,
-                    response={
-                        "content": str(api_response),
-                    },
-                ),
-                generation_config=generation_config
-            )
-
-        if self.on_message is not None:
-            self.on_message(response.text)
-        # Extract the text from the final model response
-        response_text = "DONE"
-        self._updated_tokens_count(updates_tokens_count, response)
         try:
-            response_text = response.candidates[0].text
+            for event in runner_instance.run(
+                user_id=user_id,
+                new_message=user_content,
+                session_id=session_id):
+                function_call_counter = function_call_counter + 1
+                if self.function_call_limit_per_chat is not None and function_call_counter >= self.function_call_limit_per_chat:
+                    raise TooManyFunctionCallsException(
+                        f"Exceed allowed number of function calls: {self.function_call_limit_per_chat}"
+                    )
+                
+
+                logging.debug(f"ADK Event ({session_id}): Author={event.author}, Content={event.content}")
+
+                if event.error_message:
+                    logging.error(f"ADK Runner Error ({session_id}): {event.error_message}")
+                    break
+                if self.debug:
+                    print(str(event))
+
+                if event.is_final_response() and event.content and event.content.parts:
+                    text_part = next((part.text for part in event.content.parts if part.text), None)
+                    if text_part:
+                        final_response_text = text_part
+                        logging.debug(f"ADK signaled final response with text ({session_id}): {final_response_text}")
+                    break
         except Exception as e:
-            print(f"Error: {str(e)}")
+                logging.exception(f"Error during runner.run for space {session_id}: {e}")
 
-        history_delta = self.chat._history[initial_history_len:]
-        for raw_history_item in history_delta:
-            history_item = {
-                "raw": raw_history_item,
-                "tokens_used": {},
-            }
-            self.history.append(history_item)
-        self.history[-1]["tokens_used"] = updates_tokens_count
-        self._recreate_client()
-        return response_text, self.history[initial_history_len:]
-
-# pylint: disable-next=too-many-locals
-def _generate_function_declaration(func, *, user_set_name=None, user_set_description=None):
-    func_name = user_set_name or func.__name__
-    func_doc = user_set_description or (func.__doc__ or "")
-
-    sig = inspect.signature(func)
-    params = {
-        "type": "object",
-        "properties": {}
-    }
-
-    # Parse parameter descriptions from docstring using regex
-    param_descriptions = {}
-    if func_doc:
-        param_pattern = re.compile(r":param\s+(\w+):\s*(.*)")
-        for match in param_pattern.finditer(func_doc):
-            param_name, description = match.groups()
-            param_descriptions[param_name] = description.strip()
-
-    for name, param in sig.parameters.items():
-        type_mapping = {
-            int: "integer",
-            float: "number",
-            str: "string",
-            # Add more mappings as needed
-        }
-        param_type = type_mapping.get(param.annotation, "string")
-
-        params["properties"][name] = {
-            "type": param_type,
-            "description": param_descriptions.get(name, "No description provided")
-        }
-
-    function_declaration = FunctionDeclaration(
-        name=func_name,
-        description=func_doc,
-        parameters=params
-    )
-
-    return function_declaration
-
-
-# pylint: disable-next=too-many-arguments
-def create_agent_from_functions_list(
-        *,
-        model_name=DEFAULT_MODEL,
-        functions=None,
-        function_call_limit_per_chat=None,
-        system_instruction=None,
-        debug=False,
-        add_scheduling_functions=False,
-        gcs_bucket=None,
-        gcs_blob=None,
-        delegation_function_prompt=None,
-        delegates=None,
-        on_message=None,
-        generation_config=None
-):
-    """Create an agent with custom functions and other parameters received from user"""
-    if functions is None:
-        functions = []
-    if (not gcs_bucket and gcs_blob) or (gcs_bucket and not gcs_blob):
-        raise ValueError("Both gcs_bucket and gcs_blob must be provided")
-    if add_scheduling_functions:
-        scheduler_instance = scheduler.ScheduledTaskExecutor(debug=debug, gcs_bucket=gcs_bucket, gcs_blob=gcs_blob)
-        functions.extend([
-            scheduler_instance.add_task,
-            scheduler_instance.get_all_jobs,
-            scheduler_instance.delete_job,
-        ])
-    if add_scheduling_functions and not on_message:
-        # print warning
-        logging.warning("on_message is not set, you may not see the results of the scheduled tasks")
-    if debug:
-        print(f"all_functions: {functions}")
-    # Hack to fix: https://github.com/googleapis/python-aiplatform/issues/4472
-    if functions and len(functions) > 0:
-        system_instruction = system_instruction or ""
-        system_instruction = f"""{system_instruction}\n\n# IMPORTANT
-            You are an agent with the ability to call a set of actions (functions). Follow these rules strictly:
-
-            * You must only call one method at a time. Do not attempt to call multiple methods or functions in a single execution.
-            * You can call a method, get the response, and then call another method. Each method must be executed individually.
-            * You are not allowed to execute arbitrary Python code. Your only task is to call the available methods or tools.
-            * You cannot evaluate any expressions as input arguments to the function.
-                 * Example of incorrect usage: print(12 > 24) – Incorrect (this evaluates an expression).
-                 * Example of correct usage: print(False) – Correct, provided the print method accepts a boolean as input.
-            
-            If you attempt to execute code or evaluate expressions that are not allowed, your action will fail, and you must correct it.
-             Ensure that you strictly follow these instructions."""
-    agent = GeminiAgent(
-        delegation_function_prompt=delegation_function_prompt,
-        delegates=delegates,
-        on_message=on_message,
-        functions=functions,
-        function_call_limit_per_chat=function_call_limit_per_chat,
-        model_name=model_name,
-        system_instruction=system_instruction,
-        debug=debug,
-        generation_config=generation_config)
-    if add_scheduling_functions:
-        scheduler_instance.set_gemini_agent(agent)
-        scheduler_instance.start_scheduler()
-    return agent
+        logging.info(f"Runner loop finished for space {session_id}.")
+        if final_response_text:
+                logging.debug(f"Note: ADK provided final text for space {session_id}, "
+                    "but relying on agent to use send_chat_message_tool for output.")
+        
+        if self.on_message:
+            self.on_message(final_response_text)
+        
+        return final_response_text, self._maybe_create_chat_session(
+            session_id=session_id, user_id=user_id, num_recent_events=self.events_per_session).events

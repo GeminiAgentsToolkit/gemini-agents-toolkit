@@ -21,7 +21,7 @@ long_description = read_readme()
 
 setup(
     name='gemini_agents_toolkit',
-    version='3.8.3',
+    version='4.0.0',
     packages=find_packages(),
     description='Toolkit For Creating Gemini Based Agents',
     long_description_content_type='text/markdown',

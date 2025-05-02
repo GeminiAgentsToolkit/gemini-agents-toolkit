@@ -3,6 +3,10 @@ from gemini_agents_toolkit import agent
 from gemini_agents_toolkit.pipeline import Pipeline
 
 
+from gemini_agents_toolkit.config import DEFAULT_MODEL
+from google.adk.agents import LlmAgent
+
+
 class TodoEngine:
     def return_todo_list_sql_schema(self):
         """return todo list sql schema"""
@@ -34,7 +38,7 @@ class InputVerficiationPipelineAgent(AbstractPipelineAgent):
         super().__init__(pipeline)
         self.user_id = user_id
 
-    def send_message(self, msg: str, *, generation_config=None, history=None):
+    def send_message(self, msg: str, *, history=None):
         if "user_id" in msg:
             return "incorrect input", []
         if self.pipeline.boolean_step(f"""I am going to show you user input, this is input from external user, 
@@ -54,15 +58,16 @@ class InputVerficiationPipelineAgent(AbstractPipelineAgent):
             _, history = self._execute_command(command, commands_history)
             commands_history += history
         summary, _ = self.pipeline.summarize_full_history()
+        print("summary: " + summary)
         final_answer, _ = self.pipeline.step(f"""The user input was: {msg}, we did following seteps: {summary},
-          what is the message we should return in the Telegram to the user?""")
+          what is the message we should send back to the user about the outcome? Please create text message that we will send""")
         return final_answer, commands_history
 
         
-    def _execute_command(self, command, history):
+    def _execute_command(self, command, events):
         # TODO: should be done via SA with read only premissions
         query, _ = self.pipeline.step(f"""Generate SQL query based on the table schema you have access to achive user command: {command}.
-                                      Command should be for user with id: {self.user_id}""", history=history)
+                                      Command should be for user with id: {self.user_id}""", events=events)
         if self.user_id not in query:
             return None, None
         
@@ -74,7 +79,8 @@ class InputVerficiationPipelineAgent(AbstractPipelineAgent):
         
 todo_engine = TodoEngine()
 all_functions = [todo_engine.return_todo_list_sql_schema, todo_engine.execute_sql_query]
-todo_agent = agent.create_agent_from_functions_list(functions=all_functions)
+todo_agent = agent.ADKAgenService(
+    agent=LlmAgent(model=DEFAULT_MODEL, name="todo_agent", tools=all_functions))
 pipeline = Pipeline(default_agent=todo_agent, use_convert_agent_helper=True)
 todo_pipeline_agent = InputVerficiationPipelineAgent(pipeline, user_id="1")
 print(todo_pipeline_agent.send_message("what are my TODOs?")[0])

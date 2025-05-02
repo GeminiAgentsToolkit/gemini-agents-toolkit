@@ -13,6 +13,6 @@ class AbstractPipelineAgent(ABC):
         self.pipeline = pipeline
 
     @abstractmethod
-    def send_message(self, msg: str, *, generation_config: GenerationConfig = None, history = None) -> tuple[str, list]:
+    def send_message(self, msg: str, *, events = None) -> tuple[str, list]:
         """This method must be overridden by subclasses"""
         pass
