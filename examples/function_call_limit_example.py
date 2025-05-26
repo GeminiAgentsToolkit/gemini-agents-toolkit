@@ -13,7 +13,7 @@ def say_to_duck(say: str):
 
 
 all_functions = [say_to_duck]
-duck_comms_agent = agent.ADKAgenService(
+duck_comms_agent = agent.ADKAgentService(
     agent=LlmAgent(model=SIMPLE_MODEL, name="test_agent", tools=all_functions),
     function_call_limit_per_chat=0)
 
