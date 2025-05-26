@@ -91,7 +91,7 @@ all_functions = [
     set_limit_buy_order,
     check_how_many_shares_i_own
 ]
-investor_agent = agent.ADKAgenService(
+investor_agent = agent.ADKAgentService(
     agent=LlmAgent(model=DEFAULT_MODEL, name="investing_agent", tools=all_functions))
 
 pipeline = Pipeline(default_agent=investor_agent, use_convert_agent_helper=True)

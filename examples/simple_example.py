@@ -10,7 +10,7 @@ def say_to_duck(say: str):
     return f"duck answer is: duck duck {say} duck duck duck"
 
 all_functions = [say_to_duck]
-duck_comms_agent = agent.ADKAgenService(agent=LlmAgent(model=SIMPLE_MODEL, name="test_agent", tools=all_functions))
+duck_comms_agent = agent.ADKAgentService(agent=LlmAgent(model=SIMPLE_MODEL, name="test_agent", tools=all_functions))
 
 msg, history = duck_comms_agent.send_message("say to the duck message: I am hungry")
 print(msg)

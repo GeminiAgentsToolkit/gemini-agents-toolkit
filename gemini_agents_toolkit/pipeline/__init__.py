@@ -66,7 +66,7 @@ class Pipeline(object):
         self._full_history = []
         self.debug = debug
         if use_convert_agent_helper or use_convert_to_bool_agent:
-            self.convert_agent = agent.ADKAgenService(agent=LlmAgent(
+            self.convert_agent = agent.ADKAgentService(agent=LlmAgent(
                 model=SIMPLE_MODEL, name="convert_agent", instruction=CONVERT_BOT_SYSTEM_INSTRUCTIONS))\
 
     def _convert_to_type(self, message, return_type_schema):

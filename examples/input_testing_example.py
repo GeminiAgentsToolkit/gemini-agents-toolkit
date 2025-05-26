@@ -79,7 +79,7 @@ class InputVerficiationPipelineAgent(AbstractPipelineAgent):
         
 todo_engine = TodoEngine()
 all_functions = [todo_engine.return_todo_list_sql_schema, todo_engine.execute_sql_query]
-todo_agent = agent.ADKAgenService(
+todo_agent = agent.ADKAgentService(
     agent=LlmAgent(model=DEFAULT_MODEL, name="todo_agent", tools=all_functions))
 pipeline = Pipeline(default_agent=todo_agent, use_convert_agent_helper=True)
 todo_pipeline_agent = InputVerficiationPipelineAgent(pipeline, user_id="1")
